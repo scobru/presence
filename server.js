@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // Avvio del backend Indiekit sulla porta interna 3001
 console.log('Avvio di Indiekit sulla porta interna 3001...');
-const indiekitProcess = spawn('npx', ['indiekit', 'server'], {
+const indiekitProcess = spawn('npx', ['indiekit', 'serve'], {
   env: { ...process.env, PORT: '3001' },
   stdio: 'inherit',
   shell: true
