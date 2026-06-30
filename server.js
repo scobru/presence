@@ -210,6 +210,9 @@ app.get('/', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>presence — Blog</title>
+    <link rel="authorization_endpoint" href="/auth">
+    <link rel="token_endpoint" href="/token">
+    <link rel="micropub" href="/micropub">
     <style>
         body {
             background-color: #050505;
@@ -384,6 +387,9 @@ app.get('/posts/:slug', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${post.title} — presence</title>
+    <link rel="authorization_endpoint" href="/auth">
+    <link rel="token_endpoint" href="/token">
+    <link rel="micropub" href="/micropub">
     <style>
         body {
             background-color: #050505;
