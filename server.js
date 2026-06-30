@@ -3,6 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import multer from 'multer';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,6 +12,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const postsDir = process.env.POSTS_DIR || path.join(__dirname, 'posts');
+const mediaDir = path.join(postsDir, 'media');
 
 // Identità del sito (valore `me` di IndieAuth) e segreto per firmare i token
 const SITE_URL = (process.env.ME || 'https://presence.scobrudot.dev').replace(/\/+$/, '');
@@ -18,13 +20,40 @@ const SECRET = process.env.SECRET || process.env.INDIEAUTH_SECRET || '';
 const AUTH_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 giorni
 
-// Assicura che la cartella dei post esista
-if (!fs.existsSync(postsDir)) {
-  fs.mkdirSync(postsDir, { recursive: true });
-}
+// Syndication Mastodon (opzionale): attiva solo se entrambe le variabili sono presenti
+const MASTODON_URL = (process.env.MASTODON_URL || '').replace(/\/+$/, '');
+const MASTODON_TOKEN = process.env.MASTODON_ACCESS_TOKEN || '';
+const MASTODON_USER = process.env.MASTODON_USER || '';
+
+// Assicura che le cartelle esistano
+fs.mkdirSync(mediaDir, { recursive: true });
 
 // Serve i media caricati come file statici
-app.use('/media', express.static(path.join(postsDir, 'media')));
+app.use('/media', express.static(mediaDir));
+
+// Upload media su disco: media/{yyyy}/{mm}/{timestamp}-{slug}.{ext}
+const mediaUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const d = new Date();
+      const dir = path.join(mediaDir, String(d.getFullYear()), String(d.getMonth() + 1).padStart(2, '0'));
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const safe = slugify(path.parse(file.originalname).name) || 'file';
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
+      cb(null, `${Date.now()}-${safe}${ext}`);
+    }
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10 MB
+});
+
+// URL pubblico di un file caricato da multer
+function mediaUrlFor(file) {
+  const rel = path.relative(mediaDir, file.path).split(path.sep).join('/');
+  return `${SITE_URL}/media/${rel}`;
+}
 
 // Helper per escapare HTML (titoli, tag, slug provengono da contenuto utente via Micropub)
 function escapeHtml(str) {
@@ -476,18 +505,42 @@ function requireAdminAuth(req, res, next) {
 
 app.use('/admin', express.urlencoded({ extended: false }));
 
+const ADMIN_STYLE = `
+        body { background: #050505; color: #d8d8d8; font-family: ui-monospace, monospace; padding: 30px; max-width: 800px; margin: 0 auto; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border-bottom: 1px solid #222; padding: 8px; text-align: left; vertical-align: top; }
+        .tag { color: #888; }
+        .actions { display: flex; gap: 8px; }
+        button, a.btn { background: #222; color: #fff; border: 1px solid #444; padding: 4px 10px; cursor: pointer; text-decoration: none; font: inherit; border-radius: 3px; }
+        button.danger { background: #300; border-color: #500; }
+        a { color: #6cf; }
+        form.post-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
+        form.post-form input, form.post-form textarea {
+            background: #0a0a0a; color: #d8d8d8; border: 1px solid #222; padding: 10px;
+            font-family: inherit; font-size: 0.9rem; border-radius: 3px;
+        }
+        form.post-form button[type=submit] { background: #030; border-color: #050; align-self: flex-start; padding: 8px 18px; }`;
+
 app.get('/admin', requireAdminAuth, (req, res) => {
   const posts = getSortedPosts();
   const rowsHtml = posts.map(post => `
     <tr>
       <td><a href="/posts/${encodeURIComponent(post.slug)}" target="_blank">${escapeHtml(post.title)}</a></td>
-      <td>${escapeHtml(post.date)}</td>
+      <td>${escapeHtml(String(post.date).slice(0, 10))}</td>
+      <td class="tag">${post.tags.map(t => '#' + escapeHtml(t)).join(' ')}</td>
       <td>
-        <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Cancellare questo post?');">
-          <button type="submit">Cancella</button>
-        </form>
+        <div class="actions">
+          <a class="btn" href="/admin/posts/${encodeURIComponent(post.filename)}/edit">Modifica</a>
+          <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Cancellare questo post?');">
+            <button class="danger" type="submit">Cancella</button>
+          </form>
+        </div>
       </td>
     </tr>`).join('\n');
+
+  const syndNote = (MASTODON_URL && MASTODON_TOKEN)
+    ? `<p style="color:#6a6;">Syndication Mastodon attiva → ${escapeHtml(MASTODON_USER || MASTODON_URL)}</p>`
+    : '<p style="color:#666;">Syndication Mastodon non configurata.</p>';
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
@@ -495,34 +548,51 @@ app.get('/admin', requireAdminAuth, (req, res) => {
 <head>
     <meta charset="UTF-8">
     <title>Admin — presence</title>
-    <style>
-        body { background: #050505; color: #d8d8d8; font-family: ui-monospace, monospace; padding: 30px; max-width: 800px; margin: 0 auto; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { border-bottom: 1px solid #222; padding: 8px; text-align: left; }
-        button { background: #300; color: #fff; border: 1px solid #500; padding: 4px 10px; cursor: pointer; }
-        a { color: #6cf; }
-        form.new-post { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
-        form.new-post input, form.new-post textarea {
-            background: #0a0a0a; color: #d8d8d8; border: 1px solid #222; padding: 10px;
-            font-family: inherit; font-size: 0.9rem; border-radius: 3px;
-        }
-        form.new-post button { background: #030; border-color: #050; align-self: flex-start; padding: 8px 18px; }
-    </style>
+    <style>${ADMIN_STYLE}</style>
 </head>
 <body>
     <h1>Nuovo post</h1>
-    <form class="new-post" method="POST" action="/admin/posts">
-        <input name="title" placeholder="Titolo" required>
+    ${syndNote}
+    <form class="post-form" method="POST" action="/admin/posts" enctype="multipart/form-data">
+        <input name="title" placeholder="Titolo">
         <input name="tags" placeholder="tag separati da virgola (es: web, indieweb)">
         <textarea name="content" rows="10" placeholder="Contenuto (Markdown)" required></textarea>
+        <input type="file" name="photo" accept="image/*" multiple>
         <button type="submit">Pubblica</button>
     </form>
 
     <h1>Post pubblicati (${posts.length})</h1>
     <table>
-        <tr><th>Titolo</th><th>Data</th><th></th></tr>
-        ${rowsHtml || '<tr><td colspan="3">Nessun post.</td></tr>'}
+        <tr><th>Titolo</th><th>Data</th><th>Tag</th><th></th></tr>
+        ${rowsHtml || '<tr><td colspan="4">Nessun post.</td></tr>'}
     </table>
+</body>
+</html>`);
+});
+
+// Pagina di modifica di un post esistente
+app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
+  const filename = path.basename(req.params.filename);
+  const post = getSortedPosts().find(p => p.filename === filename);
+  if (!post) return res.status(404).send('Post non trovato.');
+
+  res.setHeader('Content-Type', 'text/html');
+  res.send(`<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Modifica — presence</title>
+    <style>${ADMIN_STYLE}</style>
+</head>
+<body>
+    <p><a href="/admin">← Torna all'admin</a></p>
+    <h1>Modifica post</h1>
+    <form class="post-form" method="POST" action="/admin/posts/${encodeURIComponent(filename)}">
+        <input name="title" placeholder="Titolo" value="${escapeHtml(post.title)}">
+        <input name="tags" placeholder="tag separati da virgola" value="${escapeHtml(post.tags.join(', '))}">
+        <textarea name="content" rows="16" required>${escapeHtml(post.content)}</textarea>
+        <button type="submit">Salva</button>
+    </form>
 </body>
 </html>`);
 });
@@ -537,12 +607,26 @@ export function slugify(str) {
     .slice(0, 60);
 }
 
-// Scrive un post su disco come file Markdown con frontmatter.
-// Usato sia dalla UI /admin sia dall'endpoint Micropub.
-// Ritorna { slug, url } o lancia un Error con .status.
-export function writePost({ title, body, tags = [] }) {
+// Costruisce il blocco frontmatter YAML (parser semplice: niente virgolette nei valori)
+function buildFrontmatter({ title, date, tags = [] }) {
+  const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
+  const tagsYaml = tags.length
+    ? 'tags:\n' + tags.map(t => `  - "${String(t).replace(/"/g, '')}"`).join('\n') + '\n'
+    : '';
+  return `---\n${titleYaml}date: ${date}\n${tagsYaml}---\n`;
+}
+
+// Aggiunge le immagini in coda al body come Markdown
+function appendPhotos(body, photos = []) {
+  if (!photos.length) return body;
+  const imgs = photos.map(u => `![](${u})`).join('\n');
+  return `${body}\n\n${imgs}`.trim();
+}
+
+// Scrive un nuovo post. Ritorna { slug, url } o lancia Error con .status.
+export function writePost({ title, body, tags = [], photos = [] }) {
   title = (title || '').trim();
-  body = (body || '').trim();
+  body = appendPhotos((body || '').trim(), photos);
   tags = tags.map(t => String(t).trim()).filter(Boolean);
 
   if (!body) {
@@ -564,38 +648,90 @@ export function writePost({ title, body, tags = [] }) {
     throw e;
   }
 
-  // Rimuove le virgolette doppie: il parser frontmatter in getSortedPosts è semplice
-  const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
-  const tagsYaml = tags.length
-    ? 'tags:\n' + tags.map(t => `  - "${t.replace(/"/g, '')}"`).join('\n') + '\n'
-    : '';
-  const frontmatter = `---\n${titleYaml}date: ${now.toISOString()}\n${tagsYaml}---\n`;
-
-  fs.writeFileSync(filePath, frontmatter + body + '\n');
+  fs.writeFileSync(filePath, buildFrontmatter({ title, date: now.toISOString(), tags }) + body + '\n');
   return { slug, url: `${SITE_URL}/posts/${slug}` };
+}
+
+// Riscrive un post esistente identificato dal filename, mantenendo data e slug
+// (l'URL pubblico resta stabile). Ritorna { slug, url } o lancia Error con .status.
+export function updatePost(filename, { title, body, tags }) {
+  filename = path.basename(filename);
+  const filePath = path.join(postsDir, filename);
+  if (!filename.endsWith('.md') || path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) {
+    const e = new Error('Post non trovato.');
+    e.status = 404;
+    throw e;
+  }
+
+  const existing = getSortedPosts().find(p => p.filename === filename);
+  const newTitle = title !== undefined ? String(title).trim() : existing.title;
+  const newBody = body !== undefined ? String(body).trim() : existing.content;
+  const newTags = tags !== undefined ? tags.map(t => String(t).trim()).filter(Boolean) : existing.tags;
+
+  fs.writeFileSync(filePath, buildFrontmatter({ title: newTitle, date: existing.date, tags: newTags }) + newBody + '\n');
+  return { slug: existing.slug, url: `${SITE_URL}/posts/${existing.slug}` };
 }
 
 // Cancella un post dato il suo URL pubblico (es. https://site/posts/slug)
 function deletePostByUrl(url) {
-  let slug;
-  try {
-    slug = decodeURIComponent(new URL(url).pathname.replace(/^\/posts\//, '').replace(/\/$/, ''));
-  } catch {
-    return false;
-  }
-  const post = getSortedPosts().find(p => p.slug === slug);
+  const post = findPostByUrl(url);
   if (!post) return false;
-
   const filePath = path.join(postsDir, post.filename);
   if (path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) return false;
   fs.unlinkSync(filePath);
   return true;
 }
 
-app.post('/admin/posts', requireAdminAuth, (req, res) => {
+// Trova un post dal suo URL pubblico
+function findPostByUrl(url) {
+  let slug;
+  try {
+    slug = decodeURIComponent(new URL(url).pathname.replace(/^\/posts\//, '').replace(/\/$/, ''));
+  } catch {
+    return null;
+  }
+  return getSortedPosts().find(p => p.slug === slug) || null;
+}
+
+// Crosspost su Mastodon (best-effort). Ritorna l'URL del toot o null.
+async function syndicateToMastodon({ title, body, url }) {
+  if (!MASTODON_URL || !MASTODON_TOKEN) return null;
+  const text = `${title ? title + '\n\n' : ''}${body.slice(0, 400)}\n\n${url}`;
+  try {
+    const r = await fetch(`${MASTODON_URL}/api/v1/statuses`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${MASTODON_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: text })
+    });
+    if (!r.ok) {
+      console.error('Syndication Mastodon fallita:', r.status, await r.text().catch(() => ''));
+      return null;
+    }
+    const j = await r.json();
+    return j.url || null;
+  } catch (e) {
+    console.error('Syndication Mastodon errore:', e.message);
+    return null;
+  }
+}
+
+app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (req, res) => {
+  const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+  const photos = (req.files || []).map(mediaUrlFor);
+  try {
+    const { url } = writePost({ title: req.body.title, body: req.body.content, tags, photos });
+    await syndicateToMastodon({ title: req.body.title, body: req.body.content || '', url });
+    res.redirect('/admin');
+  } catch (e) {
+    res.status(e.status || 500).send(e.message);
+  }
+});
+
+// Salva le modifiche a un post esistente
+app.post('/admin/posts/:filename', requireAdminAuth, (req, res) => {
   const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
   try {
-    writePost({ title: req.body.title, body: req.body.content, tags });
+    updatePost(req.params.filename, { title: req.body.title, body: req.body.content, tags });
     res.redirect('/admin');
   } catch (e) {
     res.status(e.status || 500).send(e.message);
@@ -684,7 +820,7 @@ function requireConfigured(req, res, next) {
   next();
 }
 
-app.use(['/auth', '/token', '/micropub'], express.urlencoded({ extended: false }), express.json(), requireConfigured);
+app.use(['/auth', '/token', '/micropub', '/media'], express.urlencoded({ extended: false }), express.json(), requireConfigured);
 
 // --- Authorization endpoint: pagina di consenso ---
 app.get('/auth', (req, res) => {
@@ -782,6 +918,13 @@ app.get('/token', (req, res) => {
   res.json({ me: token.me, client_id: token.client_id, scope: token.scope });
 });
 
+// Estrae gli URL delle foto da una proprietà mf2 (stringa, {value}, o array misto)
+function photoUrls(photo) {
+  return [].concat(photo || [])
+    .map(p => (p && typeof p === 'object' ? p.value : p))
+    .filter(Boolean);
+}
+
 // --- Micropub: normalizza create da form-encoded o JSON (mf2) ---
 function parseMicropubCreate(body) {
   if (body.type) {
@@ -792,26 +935,47 @@ function parseMicropubCreate(body) {
     return {
       title: first(p.name) || '',
       body: String(content || ''),
-      tags: [].concat(p.category || []).filter(Boolean)
+      tags: [].concat(p.category || []).filter(Boolean),
+      photos: photoUrls(p.photo)
     };
   }
   return {
     title: body.name || '',
     body: String(body.content || ''),
-    tags: [].concat(body.category || body['category[]'] || []).filter(Boolean)
+    tags: [].concat(body.category || body['category[]'] || []).filter(Boolean),
+    photos: photoUrls(body.photo || body['photo[]'])
   };
 }
+
+// --- Media endpoint: carica un file e ritorna l'URL pubblico ---
+app.post('/media', (req, res) => {
+  const token = verifyToken(bearer(req));
+  if (!token) return res.status(401).json({ error: 'unauthorized' });
+  if (!hasScope(token, 'media') && !hasScope(token, 'create')) {
+    return res.status(403).json({ error: 'insufficient_scope', scope: 'media' });
+  }
+  mediaUpload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: 'invalid_request', error_description: err.message });
+    if (!req.file) return res.status(400).json({ error: 'invalid_request', error_description: 'Campo file mancante.' });
+    res.setHeader('Location', mediaUrlFor(req.file));
+    res.status(201).end();
+  });
+});
 
 // --- Micropub: query (q=config / source / syndicate-to) ---
 app.get('/micropub', (req, res) => {
   const token = verifyToken(bearer(req));
   if (!token) return res.status(401).json({ error: 'unauthorized' });
 
+  const syndicateTo = (MASTODON_URL && MASTODON_TOKEN)
+    ? [{ uid: `mastodon://${MASTODON_URL}`, name: MASTODON_USER || MASTODON_URL }]
+    : [];
+
   switch (req.query.q) {
     case 'config':
-      return res.json({ 'media-endpoint': null, 'syndicate-to': [] });
+      return res.json({ 'media-endpoint': `${SITE_URL}/media`, 'syndicate-to': syndicateTo });
     case 'syndicate-to':
-      return res.json({ 'syndicate-to': [] });
+      return res.json({ 'syndicate-to': syndicateTo });
     case 'source': {
       const post = getSortedPosts().find(p => `${SITE_URL}/posts/${p.slug}` === req.query.url);
       if (!post) return res.status(404).json({ error: 'not_found' });
@@ -829,8 +993,9 @@ app.get('/micropub', (req, res) => {
   }
 });
 
-// --- Micropub: create / delete ---
-app.post('/micropub', (req, res) => {
+// --- Micropub: create / update / delete ---
+// upload.any() gestisce eventuali foto allegate inline (multipart); per JSON/form passa oltre
+app.post('/micropub', mediaUpload.any(), async (req, res) => {
   const token = verifyToken(bearer(req));
   if (!token) return res.status(401).json({ error: 'unauthorized' });
 
@@ -841,9 +1006,39 @@ app.post('/micropub', (req, res) => {
       if (!hasScope(token, 'create')) {
         return res.status(403).json({ error: 'insufficient_scope', scope: 'create' });
       }
-      const { url } = writePost(parseMicropubCreate(req.body));
+      const parsed = parseMicropubCreate(req.body);
+      // Foto caricate inline col post si aggiungono a quelle passate come URL
+      const inlinePhotos = (req.files || []).map(mediaUrlFor);
+      parsed.photos = [...parsed.photos, ...inlinePhotos];
+
+      const { url } = writePost(parsed);
+      await syndicateToMastodon({ title: parsed.title, body: parsed.body, url });
       res.setHeader('Location', url);
       return res.status(201).end();
+    }
+
+    if (action === 'update') {
+      if (!hasScope(token, 'update')) {
+        return res.status(403).json({ error: 'insufficient_scope', scope: 'update' });
+      }
+      const post = findPostByUrl(req.body.url);
+      if (!post) return res.status(404).json({ error: 'not_found' });
+
+      // Supporta `replace` di name/content/category (il caso più comune dei client)
+      const repl = req.body.replace || {};
+      const first = v => (Array.isArray(v) ? v[0] : v);
+      const patch = {};
+      if (repl.name !== undefined) patch.title = first(repl.name);
+      if (repl.content !== undefined) {
+        let c = first(repl.content);
+        if (c && typeof c === 'object') c = c.html || c.value || '';
+        patch.body = String(c || '');
+      }
+      if (repl.category !== undefined) patch.tags = [].concat(repl.category).filter(Boolean);
+
+      updatePost(post.filename, patch);
+      res.setHeader('Location', `${SITE_URL}/posts/${post.slug}`);
+      return res.status(204).end();
     }
 
     if (action === 'delete') {
@@ -854,7 +1049,6 @@ app.post('/micropub', (req, res) => {
       return ok ? res.status(204).end() : res.status(404).json({ error: 'not_found' });
     }
 
-    // update / undelete non implementati: i post sono file Markdown, si modificano da /admin
     return res.status(501).json({ error: 'not_implemented', error_description: `Azione '${action}' non supportata.` });
   } catch (e) {
     return res.status(e.status || 500).json({ error: 'invalid_request', error_description: e.message });
