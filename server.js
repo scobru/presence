@@ -9,6 +9,14 @@ import { spawn } from 'child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Mappa le variabili d'ambiente di CapRover in quelle richieste da Indiekit
+if (process.env.INDIEAUTH_SECRET && !process.env.SECRET) {
+  process.env.SECRET = process.env.INDIEAUTH_SECRET;
+}
+if (process.env.INDIEAUTH_PASSWORD_SECRET && !process.env.PASSWORD_SECRET) {
+  process.env.PASSWORD_SECRET = process.env.INDIEAUTH_PASSWORD_SECRET;
+}
+
 // Avvio del backend Indiekit sulla porta interna 3001
 console.log('Avvio di Indiekit sulla porta interna 3001...');
 const indiekitProcess = spawn('npx', ['indiekit', 'serve'], {
