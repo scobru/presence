@@ -213,6 +213,8 @@ app.get('/', (req, res) => {
     <link rel="authorization_endpoint" href="/auth">
     <link rel="token_endpoint" href="/token">
     <link rel="micropub" href="/micropub">
+    <link rel="me" href="https://github.com/scobru">
+    <link rel="me" href="mailto:dev.scobru@pm.me">
     <style>
         body {
             background-color: #050505;
@@ -390,6 +392,8 @@ app.get('/posts/:slug', (req, res) => {
     <link rel="authorization_endpoint" href="/auth">
     <link rel="token_endpoint" href="/token">
     <link rel="micropub" href="/micropub">
+    <link rel="me" href="https://github.com/scobru">
+    <link rel="me" href="mailto:dev.scobru@pm.me">
     <style>
         body {
             background-color: #050505;
