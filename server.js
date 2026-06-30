@@ -48,11 +48,11 @@ app.use('/media', express.static(path.join(postsDir, 'media'), {
 // 2. Middleware di Proxy per le rotte destinate ad Indiekit
 app.use((req, res, next) => {
   const path = req.path;
-  const isIndiekitRoute = 
-    path.startsWith('/auth') || 
-    path.startsWith('/token') || 
-    path.startsWith('/micropub') || 
-    path.startsWith('/media') || 
+  const isIndiekitRoute =
+    path.startsWith('/auth') ||
+    path.startsWith('/token') ||
+    path.startsWith('/micropub') ||
+    path.startsWith('/media') ||
     path.startsWith('/assets') ||
     (path === '/' && req.query.q !== undefined);
 
@@ -211,7 +211,7 @@ app.get('/', (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>presence — Blog</title>
     <link rel="authorization_endpoint" href="/auth">
-    <link rel="token_endpoint" href="/token">
+    <link rel="token_endpoint" href="/auth/token">
     <link rel="micropub" href="/micropub">
     <link rel="me" href="https://github.com/scobru">
     <link rel="me" href="mailto:dev.scobru@pm.me">
@@ -390,7 +390,7 @@ app.get('/posts/:slug', (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${post.title} — presence</title>
     <link rel="authorization_endpoint" href="/auth">
-    <link rel="token_endpoint" href="/token">
+    <link rel="token_endpoint" href="/auth/token">
     <link rel="micropub" href="/micropub">
     <link rel="me" href="https://github.com/scobru">
     <link rel="me" href="mailto:dev.scobru@pm.me">
