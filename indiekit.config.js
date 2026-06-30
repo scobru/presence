@@ -1,6 +1,7 @@
 const plugins = [
   "@indiekit/store-file-system",
-  "@indiekit/endpoint-media"
+  "@indiekit/endpoint-media",
+  "@indiekit/preset-jekyll"
 ];
 
 const config = {
@@ -11,6 +12,7 @@ const config = {
   plugins,
   publication: {
     me: process.env.ME || "https://scobru.it",
+    preset: "@indiekit/preset-jekyll",
     media: {
       path: "media/{yyyy}/{mm}/{filename}",
       url: "media/{yyyy}/{mm}/{filename}"

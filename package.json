@@ -20,6 +20,7 @@
   "dependencies": {
     "@indiekit/endpoint-media": "latest",
     "@indiekit/indiekit": "latest",
+    "@indiekit/preset-jekyll": "latest",
     "@indiekit/store-file-system": "latest",
     "@indiekit/syndicator-mastodon": "latest",
     "dotenv": "^16.3.1",
