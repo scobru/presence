@@ -331,6 +331,12 @@ app.get('/', (req, res) => {
     </style>
 </head>
 <body>
+    <!-- Microformats2 h-card per le informazioni del profilo IndieAuth -->
+    <div class="h-card" style="display: none;">
+        <a class="p-name u-url" href="https://presence.scobrudot.dev/">scobru</a>
+        <img class="u-photo" src="https://avatars.githubusercontent.com/u/1079164?v=4" alt="scobru">
+        <a class="u-email" href="mailto:dev.scobru@pm.me">dev.scobru@pm.me</a>
+    </div>
     <div class="container">
         <header class="main-header">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -488,6 +494,12 @@ app.get('/posts/:slug', (req, res) => {
     </style>
 </head>
 <body>
+    <!-- Microformats2 h-card per le informazioni del profilo IndieAuth -->
+    <div class="h-card" style="display: none;">
+        <a class="p-name u-url" href="https://presence.scobrudot.dev/">scobru</a>
+        <img class="u-photo" src="https://avatars.githubusercontent.com/u/1079164?v=4" alt="scobru">
+        <a class="u-email" href="mailto:dev.scobru@pm.me">dev.scobru@pm.me</a>
+    </div>
     <div class="container">
         <a href="/" class="back-link">← Torna alla homepage</a>
         
