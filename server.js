@@ -1,20 +1,81 @@
-require('dotenv').config();
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+import 'dotenv/config';
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import http from 'http';
+import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Avvio del backend Indiekit sulla porta interna 3001
+console.log('Avvio di Indiekit sulla porta interna 3001...');
+const indiekitProcess = spawn('npx', ['indiekit', 'server'], {
+  env: { ...process.env, PORT: '3001' },
+  stdio: 'inherit',
+  shell: true
+});
+
+indiekitProcess.on('error', (err) => {
+  console.error('Errore nel caricamento del processo Indiekit:', err);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const postsDir = process.env.POSTS_DIR || path.join(__dirname, 'posts');
-const indiekitUrl = process.env.INDIEKIT_URL || 'http://localhost:3001';
+const indiekitUrl = 'http://localhost:3001';
 
 // Assicura che la cartella dei post esista
 if (!fs.existsSync(postsDir)) {
   fs.mkdirSync(postsDir, { recursive: true });
 }
 
-// Configura la cartella dei media caricati da Indiekit come statica
-app.use('/media', express.static(path.join(postsDir, 'media')));
+// 1. Configura la cartella dei media come statica.
+// Se un file viene cercato e non esiste fisicamente, passerà al middleware successivo (il proxy a Indiekit).
+app.use('/media', express.static(path.join(postsDir, 'media'), {
+  fallthrough: true
+}));
+
+// 2. Middleware di Proxy per le rotte destinate ad Indiekit
+app.use((req, res, next) => {
+  const path = req.path;
+  const isIndiekitRoute = 
+    path.startsWith('/auth') || 
+    path.startsWith('/token') || 
+    path.startsWith('/micropub') || 
+    path.startsWith('/media') || 
+    path.startsWith('/assets') ||
+    (path === '/' && req.query.q !== undefined);
+
+  if (isIndiekitRoute) {
+    // Riscrive e inoltra la richiesta a Indiekit su porta 3001
+    const options = {
+      hostname: 'localhost',
+      port: 3001,
+      path: req.url,
+      method: req.method,
+      headers: req.headers
+    };
+
+    // Sovrascrive l'host header con quello originale
+    options.headers['host'] = req.headers.host;
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    });
+
+    req.pipe(proxyReq, { end: true });
+
+    proxyReq.on('error', (err) => {
+      console.error('Errore proxy verso Indiekit:', err);
+      res.status(502).send('Il server di pubblicazione Indiekit è temporaneamente non disponibile.');
+    });
+  } else {
+    next();
+  }
+});
 
 // Helper per compilare Markdown in HTML (sicuro e nativo)
 function renderMarkdown(md) {
@@ -105,7 +166,7 @@ function getSortedPosts() {
   return posts.sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-// 1. Homepage: mostra la lista dei post
+// 3. Homepage: mostra la lista dei post
 app.get('/', (req, res) => {
   const posts = getSortedPosts();
   const postsHtml = posts.map(post => {
@@ -275,9 +336,9 @@ app.get('/', (req, res) => {
         </main>
 
         <div class="endpoints">
-            <code><strong>IndieAuth Auth Endpoint:</strong> ${indiekitUrl}/auth</code>
-            <code><strong>IndieAuth Token Endpoint:</strong> ${indiekitUrl}/token</code>
-            <code><strong>Micropub Endpoint:</strong> ${indiekitUrl}/micropub</code>
+            <code><strong>IndieAuth Auth Endpoint:</strong> /auth</code>
+            <code><strong>IndieAuth Token Endpoint:</strong> /token</code>
+            <code><strong>Micropub Endpoint:</strong> /micropub</code>
         </div>
 
         <footer>
@@ -288,7 +349,7 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// 2. Pagina singolo post
+// 4. Pagina singolo post
 app.get('/posts/:slug', (req, res) => {
   const { slug } = req.params;
   const posts = getSortedPosts();
@@ -436,6 +497,6 @@ app.get('/posts/:slug', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Frontend Blog attivo sulla porta ${PORT}`);
+  console.log(`Server unificato presence attivo sulla porta ${PORT}`);
   console.log(`Cartella sorgente post impostata su: ${postsDir}`);
 });

@@ -1,7 +1,7 @@
 export default {
   application: {
     me: process.env.ME || "https://scobru.it",
-    name: "scobru.it"
+    name: "presence"
   },
   plugins: [
     "@indiekit/store-file-system",
@@ -33,7 +33,7 @@ export default {
     ]
   },
   "@indiekit/store-file-system": {
-    directory: process.env.POSTS_DIR || "/usr/src/app/posts"
+    directory: process.env.POSTS_DIR || "posts"
   },
   "@indiekit/syndicator-mastodon": {
     checked: true,
