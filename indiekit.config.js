@@ -5,7 +5,8 @@ export default {
   },
   plugins: [
     "@indiekit/store-file-system",
-    "@indiekit/syndicator-mastodon"
+    "@indiekit/syndicator-mastodon",
+    "@indiekit/endpoint-media"
   ],
   publication: {
     me: process.env.ME || "https://scobru.it",

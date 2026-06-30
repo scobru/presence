@@ -18,6 +18,7 @@
   "author": "Francesco Bruno (scobru)",
   "license": "MIT",
   "dependencies": {
+    "@indiekit/endpoint-media": "latest",
     "@indiekit/indiekit": "latest",
     "@indiekit/store-file-system": "latest",
     "@indiekit/syndicator-mastodon": "latest",
