@@ -214,6 +214,7 @@ app.get('/', (req, res) => {
     <link rel="token_endpoint" href="/auth/token">
     <link rel="micropub" href="/micropub">
     <link rel="me" href="mailto:dev.scobru@pm.me">
+    <link rel="microsub" href="https://aperture.p3k.io/microsub/1103">
     <style>
         body {
             background-color: #050505;
