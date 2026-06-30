@@ -15,7 +15,7 @@ const config = {
     preset: "@indiekit/preset-jekyll",
     media: {
       path: "media/{yyyy}/{mm}/{filename}",
-      url: "media/{yyyy}/{mm}/{filename}"
+      url: "/media/{yyyy}/{mm}/{filename}"
     },
     postTypes: {
       article: {

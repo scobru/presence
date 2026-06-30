@@ -54,6 +54,10 @@ app.use((req, res, next) => {
     path.startsWith('/micropub') ||
     path.startsWith('/media') ||
     path.startsWith('/assets') ||
+    path.startsWith('/session') ||
+    path.startsWith('/new') ||
+    path.startsWith('/share') ||
+    path.startsWith('/settings') ||
     (path === '/' && req.query.q !== undefined);
 
   if (isIndiekitRoute) {
@@ -84,6 +88,15 @@ app.use((req, res, next) => {
     next();
   }
 });
+
+// Helper per escapare HTML (titoli, tag, slug provengono da contenuto utente via Micropub)
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 // Helper per compilare Markdown in HTML (sicuro e nativo)
 function renderMarkdown(md) {
@@ -184,12 +197,12 @@ app.get('/', (req, res) => {
       day: 'numeric'
     });
 
-    const tagsHtml = post.tags.map(tag => `<span class="tag">#${tag}</span>`).join(' ');
+    const tagsHtml = post.tags.map(tag => `<span class="tag">#${escapeHtml(tag)}</span>`).join(' ');
 
     return `
       <article class="post-card">
         <header>
-          <h2><a href="/posts/${post.slug}">${post.title}</a></h2>
+          <h2><a href="/posts/${encodeURIComponent(post.slug)}">${escapeHtml(post.title)}</a></h2>
           <div class="meta">
             <time>${formattedDate}</time>
             ${tagsHtml ? `<div class="tags">${tagsHtml}</div>` : ''}
@@ -198,7 +211,7 @@ app.get('/', (req, res) => {
         <div class="post-preview">
           ${renderMarkdown(post.content.length > 250 ? post.content.substring(0, 250) + '...' : post.content)}
         </div>
-        ${post.content.length > 250 ? `<a href="/posts/${post.slug}" class="read-more">Leggi tutto →</a>` : ''}
+        ${post.content.length > 250 ? `<a href="/posts/${encodeURIComponent(post.slug)}" class="read-more">Leggi tutto →</a>` : ''}
       </article>
     `;
   }).join('\n');
@@ -394,7 +407,7 @@ app.get('/posts/:slug', (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${post.title} — presence</title>
+    <title>${escapeHtml(post.title)} — presence</title>
     <link rel="authorization_endpoint" href="/auth">
     <link rel="token_endpoint" href="/auth/token">
     <link rel="micropub" href="/micropub">
@@ -506,7 +519,7 @@ app.get('/posts/:slug', (req, res) => {
         
         <article>
             <header>
-                <h1>${post.title}</h1>
+                <h1>${escapeHtml(post.title)}</h1>
                 <div class="meta">
                     <time>${formattedDate}</time>
                     ${tagsHtml ? `<div class="tags">${tagsHtml}</div>` : ''}
