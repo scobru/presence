@@ -539,6 +539,76 @@ app.get('/posts/:slug', (req, res) => {
 </html>`);
 });
 
+// 5. Admin UI: lista post + cancellazione. Protetta da Basic Auth.
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+function requireAdminAuth(req, res, next) {
+  if (!ADMIN_PASSWORD) {
+    return res.status(503).send('Admin UI disabilitata: imposta ADMIN_PASSWORD nelle variabili d\'ambiente.');
+  }
+  const auth = req.headers.authorization || '';
+  const [user, pass] = auth.startsWith('Basic ')
+    ? Buffer.from(auth.slice(6), 'base64').toString().split(':')
+    : [];
+  if (user !== ADMIN_USER || pass !== ADMIN_PASSWORD) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="presence admin"');
+    return res.status(401).send('Autenticazione richiesta.');
+  }
+  next();
+}
+
+app.use('/admin', express.urlencoded({ extended: false }));
+
+app.get('/admin', requireAdminAuth, (req, res) => {
+  const posts = getSortedPosts();
+  const rowsHtml = posts.map(post => `
+    <tr>
+      <td><a href="/posts/${encodeURIComponent(post.slug)}" target="_blank">${escapeHtml(post.title)}</a></td>
+      <td>${escapeHtml(post.date)}</td>
+      <td>
+        <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Cancellare questo post?');">
+          <button type="submit">Cancella</button>
+        </form>
+      </td>
+    </tr>`).join('\n');
+
+  res.setHeader('Content-Type', 'text/html');
+  res.send(`<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin — presence</title>
+    <style>
+        body { background: #050505; color: #d8d8d8; font-family: ui-monospace, monospace; padding: 30px; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border-bottom: 1px solid #222; padding: 8px; text-align: left; }
+        button { background: #300; color: #fff; border: 1px solid #500; padding: 4px 10px; cursor: pointer; }
+        a { color: #6cf; }
+    </style>
+</head>
+<body>
+    <h1>Post pubblicati (${posts.length})</h1>
+    <table>
+        <tr><th>Titolo</th><th>Data</th><th></th></tr>
+        ${rowsHtml || '<tr><td colspan="3">Nessun post.</td></tr>'}
+    </table>
+</body>
+</html>`);
+});
+
+app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
+  const filename = path.basename(req.params.filename);
+  const filePath = path.join(postsDir, filename);
+
+  if (!filename.endsWith('.md') || path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) {
+    return res.status(404).send('Post non trovato.');
+  }
+
+  fs.unlinkSync(filePath);
+  res.redirect('/admin');
+});
+
 app.listen(PORT, () => {
   console.log(`Server unificato presence attivo sulla porta ${PORT}`);
   console.log(`Cartella sorgente post impostata su: ${postsDir}`);
