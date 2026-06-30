@@ -1,11 +1,12 @@
 {
   "name": "presence",
   "version": "1.0.0",
-  "description": "Markdown blog frontend with self-hosted admin UI for CapRover VPS",
+  "description": "Markdown blog with native IndieAuth + Micropub and a self-hosted admin UI for CapRover VPS",
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node selftest.mjs"
   },
   "keywords": [
     "indieauth",

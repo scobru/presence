@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,6 +11,12 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 const postsDir = process.env.POSTS_DIR || path.join(__dirname, 'posts');
+
+// Identità del sito (valore `me` di IndieAuth) e segreto per firmare i token
+const SITE_URL = (process.env.ME || 'https://presence.scobrudot.dev').replace(/\/+$/, '');
+const SECRET = process.env.SECRET || process.env.INDIEAUTH_SECRET || '';
+const AUTH_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 giorni
 
 // Assicura che la cartella dei post esista
 if (!fs.existsSync(postsDir)) {
@@ -153,6 +160,9 @@ app.get('/', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>presence — Blog</title>
+    <link rel="authorization_endpoint" href="/auth">
+    <link rel="token_endpoint" href="/token">
+    <link rel="micropub" href="/micropub">
     <link rel="me" href="mailto:dev.scobru@pm.me">
     <link rel="microsub" href="https://aperture.p3k.io/microsub/1103">
     <style>
@@ -314,6 +324,9 @@ app.get('/posts/:slug', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(post.title)} — presence</title>
+    <link rel="authorization_endpoint" href="/auth">
+    <link rel="token_endpoint" href="/token">
+    <link rel="micropub" href="/micropub">
     <link rel="me" href="https://github.com/scobru">
     <link rel="me" href="mailto:dev.scobru@pm.me">
     <style>
@@ -515,7 +528,7 @@ app.get('/admin', requireAdminAuth, (req, res) => {
 });
 
 // Genera uno slug sicuro per il filesystem da un titolo
-function slugify(str) {
+export function slugify(str) {
   return String(str)
     .toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -524,33 +537,69 @@ function slugify(str) {
     .slice(0, 60);
 }
 
-app.post('/admin/posts', requireAdminAuth, (req, res) => {
-  const title = (req.body.title || '').trim();
-  const body = (req.body.content || '').trim();
-  const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+// Scrive un post su disco come file Markdown con frontmatter.
+// Usato sia dalla UI /admin sia dall'endpoint Micropub.
+// Ritorna { slug, url } o lancia un Error con .status.
+export function writePost({ title, body, tags = [] }) {
+  title = (title || '').trim();
+  body = (body || '').trim();
+  tags = tags.map(t => String(t).trim()).filter(Boolean);
 
-  if (!title || !body) {
-    return res.status(400).send('Titolo e contenuto sono obbligatori.');
+  if (!body) {
+    const e = new Error('Il contenuto è obbligatorio.');
+    e.status = 400;
+    throw e;
   }
 
   const now = new Date();
   const datePart = now.toISOString().slice(0, 10);
+  // Una nota senza titolo (es. da client Micropub) usa il timestamp come slug
   const slug = slugify(title) || String(now.getTime());
   const filename = `${datePart}-${slug}.md`;
   const filePath = path.join(postsDir, filename);
 
   if (fs.existsSync(filePath)) {
-    return res.status(409).send('Esiste già un post con questo slug per oggi.');
+    const e = new Error('Esiste già un post con questo slug per oggi.');
+    e.status = 409;
+    throw e;
   }
 
   // Rimuove le virgolette doppie: il parser frontmatter in getSortedPosts è semplice
+  const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
   const tagsYaml = tags.length
     ? 'tags:\n' + tags.map(t => `  - "${t.replace(/"/g, '')}"`).join('\n') + '\n'
     : '';
-  const frontmatter = `---\ntitle: "${title.replace(/"/g, '')}"\ndate: ${now.toISOString()}\n${tagsYaml}---\n`;
+  const frontmatter = `---\n${titleYaml}date: ${now.toISOString()}\n${tagsYaml}---\n`;
 
   fs.writeFileSync(filePath, frontmatter + body + '\n');
-  res.redirect('/admin');
+  return { slug, url: `${SITE_URL}/posts/${slug}` };
+}
+
+// Cancella un post dato il suo URL pubblico (es. https://site/posts/slug)
+function deletePostByUrl(url) {
+  let slug;
+  try {
+    slug = decodeURIComponent(new URL(url).pathname.replace(/^\/posts\//, '').replace(/\/$/, ''));
+  } catch {
+    return false;
+  }
+  const post = getSortedPosts().find(p => p.slug === slug);
+  if (!post) return false;
+
+  const filePath = path.join(postsDir, post.filename);
+  if (path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) return false;
+  fs.unlinkSync(filePath);
+  return true;
+}
+
+app.post('/admin/posts', requireAdminAuth, (req, res) => {
+  const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+  try {
+    writePost({ title: req.body.title, body: req.body.content, tags });
+    res.redirect('/admin');
+  } catch (e) {
+    res.status(e.status || 500).send(e.message);
+  }
 });
 
 app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
@@ -565,7 +614,260 @@ app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
   res.redirect('/admin');
 });
 
-app.listen(PORT, () => {
-  console.log(`Server unificato presence attivo sulla porta ${PORT}`);
-  console.log(`Cartella sorgente post impostata su: ${postsDir}`);
+// ============================================================
+// IndieAuth (authorization + token endpoint) e Micropub nativi
+// Spec: https://indieauth.spec.indieweb.org/ e https://www.w3.org/TR/micropub/
+// ============================================================
+
+// --- Helper crittografici ---
+function b64url(buf) {
+  return Buffer.from(buf).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Access token = JWT firmato HMAC-SHA256, stateless (nessun DB richiesto)
+export function signToken(payload) {
+  const body = b64url(JSON.stringify(payload));
+  const sig = b64url(crypto.createHmac('sha256', SECRET).update(body).digest());
+  return `${body}.${sig}`;
+}
+
+export function verifyToken(token) {
+  if (typeof token !== 'string' || !token.includes('.')) return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const expected = b64url(crypto.createHmac('sha256', SECRET).update(body).digest());
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(body.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
+  } catch {
+    return null;
+  }
+  if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+  return payload;
+}
+
+export function pkceS256(verifier) {
+  return b64url(crypto.createHash('sha256').update(String(verifier)).digest());
+}
+
+function timingEqual(a, b) {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+// Codici di autorizzazione: vita breve (10 min), uso singolo, in memoria.
+// ponytail: Map in memoria — se il container riavvia durante il login, rifai l'accesso.
+// Per single-user va bene; se serve multi-istanza, sposta su store condiviso.
+const authCodes = new Map();
+
+function hasScope(token, scope) {
+  const scopes = String(token?.scope || '').split(/\s+/).filter(Boolean);
+  if (scopes.includes(scope)) return true;
+  if (scope === 'create' && scopes.includes('post')) return true; // alias legacy
+  return false;
+}
+
+function bearer(req) {
+  const h = req.headers.authorization || '';
+  if (h.startsWith('Bearer ')) return h.slice(7);
+  if (req.body && req.body.access_token) return req.body.access_token;
+  return null;
+}
+
+function requireConfigured(req, res, next) {
+  if (!SECRET || !AUTH_PASSWORD) {
+    return res.status(503).json({ error: 'service_unavailable', error_description: 'Imposta SECRET e ADMIN_PASSWORD per abilitare IndieAuth/Micropub.' });
+  }
+  next();
+}
+
+app.use(['/auth', '/token', '/micropub'], express.urlencoded({ extended: false }), express.json(), requireConfigured);
+
+// --- Authorization endpoint: pagina di consenso ---
+app.get('/auth', (req, res) => {
+  const { client_id, redirect_uri, state, code_challenge, code_challenge_method, scope, me } = req.query;
+
+  if (!client_id || !redirect_uri || !code_challenge || code_challenge_method !== 'S256') {
+    return res.status(400).send('Richiesta di autorizzazione non valida (richiesto client_id, redirect_uri, code_challenge, code_challenge_method=S256).');
+  }
+
+  const hidden = { client_id, redirect_uri, state, code_challenge, code_challenge_method, scope: scope || '', me: me || SITE_URL };
+  const hiddenHtml = Object.entries(hidden)
+    .map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`).join('\n');
+  const scopeList = String(scope || '').split(/\s+/).filter(Boolean);
+
+  res.setHeader('Content-Type', 'text/html');
+  res.send(`<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Autorizza — presence</title>
+<style>
+  body { background:#050505; color:#d8d8d8; font-family:ui-monospace,monospace; max-width:420px; margin:60px auto; padding:0 20px; }
+  .box { border:1px solid #222; background:#0a0a0a; padding:25px; border-radius:6px; }
+  h1 { font-size:1.3rem; color:#fff; }
+  code { color:#6cf; word-break:break-all; }
+  ul { padding-left:18px; } li { margin-bottom:4px; }
+  input[type=password] { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #333; padding:10px; margin:12px 0; border-radius:4px; }
+  button { background:#06c; color:#fff; border:0; padding:10px 20px; border-radius:4px; cursor:pointer; width:100%; font-size:1rem; }
+</style></head><body><div class="box">
+  <h1>Autorizza applicazione</h1>
+  <p><code>${escapeHtml(client_id)}</code> chiede accesso a <code>${escapeHtml(hidden.me)}</code></p>
+  ${scopeList.length ? `<p>Permessi:</p><ul>${scopeList.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>` : '<p>Solo autenticazione (nessun permesso di scrittura).</p>'}
+  <form method="POST" action="/auth">
+    ${hiddenHtml}
+    <input type="password" name="password" placeholder="Password" autofocus required>
+    <button type="submit">Consenti</button>
+  </form>
+</div></body></html>`);
 });
+
+// --- Authorization endpoint: approvazione → emette il codice ---
+app.post('/auth', (req, res) => {
+  const { password, client_id, redirect_uri, state, code_challenge, code_challenge_method, scope } = req.body;
+
+  if (!timingEqual(password || '', AUTH_PASSWORD)) {
+    return res.status(401).send('Password errata.');
+  }
+  if (!client_id || !redirect_uri || !code_challenge || code_challenge_method !== 'S256') {
+    return res.status(400).send('Parametri di autorizzazione mancanti.');
+  }
+
+  const code = b64url(crypto.randomBytes(32));
+  authCodes.set(code, {
+    client_id, redirect_uri, code_challenge,
+    scope: scope || '',
+    me: SITE_URL,
+    exp: Date.now() + 10 * 60 * 1000
+  });
+
+  const sep = redirect_uri.includes('?') ? '&' : '?';
+  const qs = `code=${encodeURIComponent(code)}` + (state ? `&state=${encodeURIComponent(state)}` : '');
+  res.redirect(`${redirect_uri}${sep}${qs}`);
+});
+
+// Scambia un codice di autorizzazione verificando la PKCE. Ritorna i dati o null.
+function redeemCode({ code, client_id, redirect_uri, code_verifier }) {
+  const data = authCodes.get(code);
+  if (!data) return null;
+  authCodes.delete(code); // uso singolo
+  if (data.exp < Date.now()) return null;
+  if (data.client_id !== client_id || data.redirect_uri !== redirect_uri) return null;
+  if (!timingEqual(pkceS256(code_verifier || ''), data.code_challenge)) return null;
+  return data;
+}
+
+// --- Token endpoint: scambia codice → access token ---
+app.post('/token', (req, res) => {
+  const { grant_type, code, client_id, redirect_uri, code_verifier } = req.body;
+
+  if (grant_type !== 'authorization_code') {
+    return res.status(400).json({ error: 'unsupported_grant_type' });
+  }
+
+  const data = redeemCode({ code, client_id, redirect_uri, code_verifier });
+  if (!data) {
+    return res.status(400).json({ error: 'invalid_grant' });
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const access_token = signToken({ me: data.me, scope: data.scope, client_id, iat: now, exp: now + TOKEN_TTL });
+  res.json({ access_token, token_type: 'Bearer', scope: data.scope, me: data.me });
+});
+
+// --- Token endpoint: verifica token (usato da alcuni client) ---
+app.get('/token', (req, res) => {
+  const token = verifyToken(bearer(req));
+  if (!token) return res.status(401).json({ error: 'unauthorized' });
+  res.json({ me: token.me, client_id: token.client_id, scope: token.scope });
+});
+
+// --- Micropub: normalizza create da form-encoded o JSON (mf2) ---
+function parseMicropubCreate(body) {
+  if (body.type) {
+    const p = body.properties || {};
+    const first = v => (Array.isArray(v) ? v[0] : v);
+    let content = first(p.content);
+    if (content && typeof content === 'object') content = content.html || content.value || '';
+    return {
+      title: first(p.name) || '',
+      body: String(content || ''),
+      tags: [].concat(p.category || []).filter(Boolean)
+    };
+  }
+  return {
+    title: body.name || '',
+    body: String(body.content || ''),
+    tags: [].concat(body.category || body['category[]'] || []).filter(Boolean)
+  };
+}
+
+// --- Micropub: query (q=config / source / syndicate-to) ---
+app.get('/micropub', (req, res) => {
+  const token = verifyToken(bearer(req));
+  if (!token) return res.status(401).json({ error: 'unauthorized' });
+
+  switch (req.query.q) {
+    case 'config':
+      return res.json({ 'media-endpoint': null, 'syndicate-to': [] });
+    case 'syndicate-to':
+      return res.json({ 'syndicate-to': [] });
+    case 'source': {
+      const post = getSortedPosts().find(p => `${SITE_URL}/posts/${p.slug}` === req.query.url);
+      if (!post) return res.status(404).json({ error: 'not_found' });
+      return res.json({
+        type: ['h-entry'],
+        properties: {
+          name: [post.title],
+          content: [post.content],
+          ...(post.tags.length ? { category: post.tags } : {})
+        }
+      });
+    }
+    default:
+      return res.json({});
+  }
+});
+
+// --- Micropub: create / delete ---
+app.post('/micropub', (req, res) => {
+  const token = verifyToken(bearer(req));
+  if (!token) return res.status(401).json({ error: 'unauthorized' });
+
+  const action = req.body.action || 'create';
+
+  try {
+    if (action === 'create') {
+      if (!hasScope(token, 'create')) {
+        return res.status(403).json({ error: 'insufficient_scope', scope: 'create' });
+      }
+      const { url } = writePost(parseMicropubCreate(req.body));
+      res.setHeader('Location', url);
+      return res.status(201).end();
+    }
+
+    if (action === 'delete') {
+      if (!hasScope(token, 'delete')) {
+        return res.status(403).json({ error: 'insufficient_scope', scope: 'delete' });
+      }
+      const ok = deletePostByUrl(req.body.url);
+      return ok ? res.status(204).end() : res.status(404).json({ error: 'not_found' });
+    }
+
+    // update / undelete non implementati: i post sono file Markdown, si modificano da /admin
+    return res.status(501).json({ error: 'not_implemented', error_description: `Azione '${action}' non supportata.` });
+  } catch (e) {
+    return res.status(e.status || 500).json({ error: 'invalid_request', error_description: e.message });
+  }
+});
+
+// Avvia il server solo se eseguito direttamente (non in import, es. dai test)
+if (process.argv[1] === __filename) {
+  app.listen(PORT, () => {
+    if (!SECRET || !AUTH_PASSWORD) {
+      console.warn('ATTENZIONE: SECRET o ADMIN_PASSWORD non impostati — IndieAuth/Micropub e /admin restano disabilitati.');
+    }
+    console.log(`Server unificato presence attivo sulla porta ${PORT}`);
+    console.log(`Cartella sorgente post impostata su: ${postsDir}`);
+  });
+}
