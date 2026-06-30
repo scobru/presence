@@ -10,24 +10,7 @@ services:
       - ./posts:/usr/src/app/posts
     environment:
       - PORT=3000
-      - SECRET=${INDIEAUTH_SECRET}
-      - PASSWORD_SECRET=${INDIEAUTH_PASSWORD_SECRET}
       - POSTS_DIR=/usr/src/app/posts
-      - MASTODON_URL=${MASTODON_URL}
-      - MASTODON_USER=${MASTODON_USER}
-      - MASTODON_ACCESS_TOKEN=${MASTODON_ACCESS_TOKEN}
-      # Se vuoi abilitare il database locale per avere la cronologia media/token in admin di Indiekit:
-      # - MONGO_URL=mongodb://mongo:27017/indiekit
-    # depends_on:
-    #   - mongo
+      - ADMIN_USER=${ADMIN_USER}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     restart: always
-
-  # mongo:
-  #   image: mongo:6-jammy
-  #   container_name: presence-db
-  #   volumes:
-  #     - mongo-data:/data/db
-  #   restart: always
-
-# volumes:
-#   mongo-data:

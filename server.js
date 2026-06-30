@@ -2,92 +2,22 @@ import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import http from 'http';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Mappa le variabili d'ambiente di CapRover in quelle richieste da Indiekit
-if (process.env.INDIEAUTH_SECRET && !process.env.SECRET) {
-  process.env.SECRET = process.env.INDIEAUTH_SECRET;
-}
-if (process.env.INDIEAUTH_PASSWORD_SECRET && !process.env.PASSWORD_SECRET) {
-  process.env.PASSWORD_SECRET = process.env.INDIEAUTH_PASSWORD_SECRET;
-}
-
-// Avvio del backend Indiekit sulla porta interna 3001
-console.log('Avvio di Indiekit sulla porta interna 3001...');
-const indiekitProcess = spawn('npx', ['indiekit', 'serve'], {
-  env: { ...process.env, PORT: '3001' },
-  stdio: 'inherit',
-  shell: true
-});
-
-indiekitProcess.on('error', (err) => {
-  console.error('Errore nel caricamento del processo Indiekit:', err);
-});
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const postsDir = process.env.POSTS_DIR || path.join(__dirname, 'posts');
-const indiekitUrl = 'http://localhost:3001';
 
 // Assicura che la cartella dei post esista
 if (!fs.existsSync(postsDir)) {
   fs.mkdirSync(postsDir, { recursive: true });
 }
 
-// 1. Configura la cartella dei media come statica.
-// Se un file viene cercato e non esiste fisicamente, passerà al middleware successivo (il proxy a Indiekit).
-app.use('/media', express.static(path.join(postsDir, 'media'), {
-  fallthrough: true
-}));
-
-// 2. Middleware di Proxy per le rotte destinate ad Indiekit
-app.use((req, res, next) => {
-  const path = req.path;
-  const isIndiekitRoute =
-    path.startsWith('/auth') ||
-    path.startsWith('/token') ||
-    path.startsWith('/micropub') ||
-    path.startsWith('/media') ||
-    path.startsWith('/assets') ||
-    path.startsWith('/session') ||
-    path.startsWith('/new') ||
-    path.startsWith('/share') ||
-    path.startsWith('/settings') ||
-    (path === '/' && req.query.q !== undefined);
-
-  if (isIndiekitRoute) {
-    // Riscrive e inoltra la richiesta a Indiekit su porta 3001
-    const options = {
-      hostname: 'localhost',
-      port: 3001,
-      path: req.url,
-      method: req.method,
-      headers: req.headers
-    };
-
-    // Sovrascrive l'host header con quello originale
-    options.headers['host'] = req.headers.host;
-
-    const proxyReq = http.request(options, (proxyRes) => {
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
-      proxyRes.pipe(res, { end: true });
-    });
-
-    req.pipe(proxyReq, { end: true });
-
-    proxyReq.on('error', (err) => {
-      console.error('Errore proxy verso Indiekit:', err);
-      res.status(502).send('Il server di pubblicazione Indiekit è temporaneamente non disponibile.');
-    });
-  } else {
-    next();
-  }
-});
+// Serve i media caricati come file statici
+app.use('/media', express.static(path.join(postsDir, 'media')));
 
 // Helper per escapare HTML (titoli, tag, slug provengono da contenuto utente via Micropub)
 function escapeHtml(str) {
@@ -223,9 +153,6 @@ app.get('/', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>presence — Blog</title>
-    <link rel="authorization_endpoint" href="/auth">
-    <link rel="token_endpoint" href="/auth/token">
-    <link rel="micropub" href="/micropub">
     <link rel="me" href="mailto:dev.scobru@pm.me">
     <link rel="microsub" href="https://aperture.p3k.io/microsub/1103">
     <style>
@@ -328,20 +255,6 @@ app.get('/', (req, res) => {
             color: #444444;
             text-align: center;
         }
-        .endpoints {
-            font-size: 0.75rem;
-            color: #555555;
-            background-color: #080808;
-            border: 1px solid #121212;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 20px;
-            text-align: left;
-        }
-        .endpoints code {
-            display: block;
-            margin-bottom: 4px;
-        }
     </style>
 </head>
 <body>
@@ -358,20 +271,13 @@ app.get('/', (req, res) => {
                 <div class="status"><span class="status-dot"></span>VPS Online</div>
             </div>
             <p style="color: #888888; font-size: 0.85rem; margin: 0;">
-                Sito personale di <a href="https://scobru.it" style="color: #ffffff;">scobru.it</a>. 
-                I post sono pubblicati tramite Indiekit (Micropub).
+                Sito personale di <a href="https://scobru.it" style="color: #ffffff;">scobru.it</a>.
             </p>
         </header>
 
         <main>
-            ${postsHtml || '<p style="color: #555555; text-align: center; padding: 40px 0;">Nessun post pubblicato ancora. Usa un client Micropub per iniziare.</p>'}
+            ${postsHtml || '<p style="color: #555555; text-align: center; padding: 40px 0;">Nessun post pubblicato ancora.</p>'}
         </main>
-
-        <div class="endpoints">
-            <code><strong>IndieAuth Auth Endpoint:</strong> /auth</code>
-            <code><strong>IndieAuth Token Endpoint:</strong> /token</code>
-            <code><strong>Micropub Endpoint:</strong> /micropub</code>
-        </div>
 
         <footer>
             // running stateful on node.js
@@ -408,9 +314,6 @@ app.get('/posts/:slug', (req, res) => {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(post.title)} — presence</title>
-    <link rel="authorization_endpoint" href="/auth">
-    <link rel="token_endpoint" href="/auth/token">
-    <link rel="micropub" href="/micropub">
     <link rel="me" href="https://github.com/scobru">
     <link rel="me" href="mailto:dev.scobru@pm.me">
     <style>
@@ -580,14 +483,28 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     <meta charset="UTF-8">
     <title>Admin — presence</title>
     <style>
-        body { background: #050505; color: #d8d8d8; font-family: ui-monospace, monospace; padding: 30px; }
+        body { background: #050505; color: #d8d8d8; font-family: ui-monospace, monospace; padding: 30px; max-width: 800px; margin: 0 auto; }
         table { width: 100%; border-collapse: collapse; }
         td, th { border-bottom: 1px solid #222; padding: 8px; text-align: left; }
         button { background: #300; color: #fff; border: 1px solid #500; padding: 4px 10px; cursor: pointer; }
         a { color: #6cf; }
+        form.new-post { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
+        form.new-post input, form.new-post textarea {
+            background: #0a0a0a; color: #d8d8d8; border: 1px solid #222; padding: 10px;
+            font-family: inherit; font-size: 0.9rem; border-radius: 3px;
+        }
+        form.new-post button { background: #030; border-color: #050; align-self: flex-start; padding: 8px 18px; }
     </style>
 </head>
 <body>
+    <h1>Nuovo post</h1>
+    <form class="new-post" method="POST" action="/admin/posts">
+        <input name="title" placeholder="Titolo" required>
+        <input name="tags" placeholder="tag separati da virgola (es: web, indieweb)">
+        <textarea name="content" rows="10" placeholder="Contenuto (Markdown)" required></textarea>
+        <button type="submit">Pubblica</button>
+    </form>
+
     <h1>Post pubblicati (${posts.length})</h1>
     <table>
         <tr><th>Titolo</th><th>Data</th><th></th></tr>
@@ -595,6 +512,45 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     </table>
 </body>
 </html>`);
+});
+
+// Genera uno slug sicuro per il filesystem da un titolo
+function slugify(str) {
+  return String(str)
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+app.post('/admin/posts', requireAdminAuth, (req, res) => {
+  const title = (req.body.title || '').trim();
+  const body = (req.body.content || '').trim();
+  const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+
+  if (!title || !body) {
+    return res.status(400).send('Titolo e contenuto sono obbligatori.');
+  }
+
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10);
+  const slug = slugify(title) || String(now.getTime());
+  const filename = `${datePart}-${slug}.md`;
+  const filePath = path.join(postsDir, filename);
+
+  if (fs.existsSync(filePath)) {
+    return res.status(409).send('Esiste già un post con questo slug per oggi.');
+  }
+
+  // Rimuove le virgolette doppie: il parser frontmatter in getSortedPosts è semplice
+  const tagsYaml = tags.length
+    ? 'tags:\n' + tags.map(t => `  - "${t.replace(/"/g, '')}"`).join('\n') + '\n'
+    : '';
+  const frontmatter = `---\ntitle: "${title.replace(/"/g, '')}"\ndate: ${now.toISOString()}\n${tagsYaml}---\n`;
+
+  fs.writeFileSync(filePath, frontmatter + body + '\n');
+  res.redirect('/admin');
 });
 
 app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {

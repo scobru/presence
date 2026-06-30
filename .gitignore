@@ -1,2 +1,4 @@
 .tokensave
 .claude
+node_modules
+.env
