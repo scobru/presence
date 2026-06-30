@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:6-jammy
+    container_name: presence-db
+    volumes:
+      - mongo-data:/data/db
+    restart: always
+
+  indiekit:
+    build: ./backend
+    container_name: presence-backend
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./posts:/usr/src/app/posts
+    environment:
+      - MONGO_URL=mongodb://mongo:27017/indiekit
+      - SECRET=${INDIEAUTH_SECRET}
+      - PASSWORD_SECRET=${INDIEAUTH_PASSWORD_SECRET}
+      - POSTS_DIR=/usr/src/app/posts
+      - MASTODON_URL=${MASTODON_URL}
+      - MASTODON_USER=${MASTODON_USER}
+      - MASTODON_ACCESS_TOKEN=${MASTODON_ACCESS_TOKEN}
+    depends_on:
+      - mongo
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: presence-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./posts:/usr/src/app/posts
+    environment:
+      - PORT=3000
+      - POSTS_DIR=/usr/src/app/posts
+      - INDIEKIT_URL=${INDIEKIT_PUBLIC_URL}
+    restart: always
+
+volumes:
+  mongo-data:
