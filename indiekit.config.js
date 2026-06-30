@@ -15,24 +15,22 @@ const config = {
       path: "media/{yyyy}/{mm}/{filename}",
       url: "media/{yyyy}/{mm}/{filename}"
     },
-    postTypes: [
-      {
-        type: "article",
+    postTypes: {
+      article: {
         name: "Article",
         post: {
           path: "{yyyy}-{mm}-{dd}-{slug}.md",
           url: "posts/{slug}"
         }
       },
-      {
-        type: "note",
+      note: {
         name: "Note",
         post: {
           path: "{yyyy}-{mm}-{dd}-{slug}.md",
           url: "posts/{slug}"
         }
       }
-    ]
+    }
   },
   "@indiekit/store-file-system": {
     directory: process.env.POSTS_DIR || "posts"
