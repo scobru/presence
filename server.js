@@ -124,6 +124,9 @@ function renderMarkdown(md) {
   html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
   html = html.replace(/`(.*?)`/g, '<code>$1</code>');
   html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  // Immagini prima dei link (la sintassi immagine contiene quella del link)
+  html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:4px">');
+  html = html.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
   html = '<p>' + html.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
   html = html.replace(/<p><h/g, '<h').replace(/<\/h(\d)><\/p>/g, '</h$1>');
   html = html.replace(/<p><pre>/g, '<pre>').replace(/<\/pre><\/p>/g, '</pre>');
@@ -792,22 +795,57 @@ function findPostByUrl(url) {
   return getSortedPosts().find(p => p.slug === slug) || null;
 }
 
-// Crosspost su Mastodon (best-effort). Ritorna l'URL del toot o null.
-async function syndicateToMastodon({ title, body, url }) {
-  if (!MASTODON_URL || !MASTODON_TOKEN) return null;
-  const text = `${title ? title + '\n\n' : ''}${body.slice(0, 400)}\n\n${url}`;
+// Converte un URL media pubblico nel percorso del file locale, o null se esterno
+function mediaUrlToPath(u) {
+  const prefix = `${SITE_URL}/media/`;
+  return typeof u === 'string' && u.startsWith(prefix)
+    ? path.join(mediaDir, u.slice(prefix.length))
+    : null;
+}
+
+// Carica un file su Mastodon (/api/v2/media). Ritorna l'id o null.
+async function uploadMastodonMedia(filePath) {
   try {
+    const form = new FormData();
+    form.append('file', new Blob([fs.readFileSync(filePath)]), path.basename(filePath));
+    const r = await fetch(`${MASTODON_URL}/api/v2/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${MASTODON_TOKEN}` },
+      body: form
+    });
+    if (!r.ok) return null;
+    return (await r.json()).id || null;
+  } catch {
+    return null;
+  }
+}
+
+// Crosspost su Mastodon (best-effort). photoPaths = percorsi file locali da allegare.
+// Ritorna l'URL del toot o null.
+async function syndicateToMastodon({ title, body, url, photoPaths = [] }) {
+  if (!MASTODON_URL || !MASTODON_TOKEN) return null;
+  try {
+    // Carica le immagini come media Mastodon
+    const mediaIds = [];
+    for (const p of photoPaths) {
+      const id = await uploadMastodonMedia(p);
+      if (id) mediaIds.push(id);
+    }
+
+    // Testo senza la sintassi immagine Markdown (le foto sono allegate a parte)
+    const clean = body.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    const text = `${title ? title + '\n\n' : ''}${clean.slice(0, 400)}\n\n${url}`;
+
     const r = await fetch(`${MASTODON_URL}/api/v1/statuses`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${MASTODON_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: text })
+      body: JSON.stringify({ status: text, ...(mediaIds.length ? { media_ids: mediaIds } : {}) })
     });
     if (!r.ok) {
       console.error('Syndication Mastodon fallita:', r.status, await r.text().catch(() => ''));
       return null;
     }
-    const j = await r.json();
-    return j.url || null;
+    return (await r.json()).url || null;
   } catch (e) {
     console.error('Syndication Mastodon errore:', e.message);
     return null;
@@ -818,11 +856,12 @@ app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (re
   const type = POST_TYPES[req.body.ptype] ? req.body.ptype : 'note';
   const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
   const photos = (req.files || []).map(mediaUrlFor);
+  const photoPaths = (req.files || []).map(f => f.path);
   const link = (req.body.link || '').trim();
   const body = [contextLine(type, link), req.body.content].filter(Boolean).join('\n\n');
   try {
     const { url } = writePost({ title: req.body.title, body, tags, photos, type });
-    await syndicateToMastodon({ title: req.body.title, body, url });
+    await syndicateToMastodon({ title: req.body.title, body, url, photoPaths });
     res.redirect('/admin');
   } catch (e) {
     res.status(e.status || 500).send(e.message);
@@ -1130,7 +1169,9 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       parsed.photos = [...parsed.photos, ...inlinePhotos];
 
       const { url } = writePost(parsed);
-      await syndicateToMastodon({ title: parsed.title, body: parsed.body, url });
+      // parsed.photos contiene già gli URL inline: risolvi quelli locali per Mastodon
+      const photoPaths = parsed.photos.map(mediaUrlToPath).filter(Boolean);
+      await syndicateToMastodon({ title: parsed.title, body: parsed.body, url, photoPaths });
       res.setHeader('Location', url);
       return res.status(201).end();
     }
