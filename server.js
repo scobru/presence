@@ -20,10 +20,31 @@ const SECRET = process.env.SECRET || process.env.INDIEAUTH_SECRET || '';
 const AUTH_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 giorni
 
+// Nome e descrizione del sito (mostrati in homepage). Configurabili via env.
+const SITE_NAME = process.env.SITE_NAME || 'presence';
+const SITE_DESCRIPTION = process.env.SITE_DESCRIPTION || '';
+
 // Syndication Mastodon (opzionale): attiva solo se entrambe le variabili sono presenti
 const MASTODON_URL = (process.env.MASTODON_URL || '').replace(/\/+$/, '');
 const MASTODON_TOKEN = process.env.MASTODON_ACCESS_TOKEN || '';
 const MASTODON_USER = process.env.MASTODON_USER || '';
+
+// Tipi di post IndieWeb — sorgente unica per composer, rendering e filtro homepage.
+// url:true → il tipo richiede un URL di riferimento (bookmark-of, like-of, ecc.)
+const POST_TYPES = {
+  note:     { label: 'Nota',     emoji: '📝', url: false, prop: null },
+  article:  { label: 'Articolo', emoji: '📄', url: false, prop: null },
+  bookmark: { label: 'Bookmark', emoji: '🔖', url: true,  prop: 'bookmark-of' },
+  reply:    { label: 'Risposta', emoji: '↩',  url: true,  prop: 'in-reply-to' },
+  rsvp:     { label: 'RSVP',     emoji: '📅', url: true,  prop: 'in-reply-to' },
+  repost:   { label: 'Repost',   emoji: '🔁', url: true,  prop: 'repost-of' },
+  like:     { label: 'Like',     emoji: '👍', url: true,  prop: 'like-of' },
+  checkin:  { label: 'Check-in', emoji: '📍', url: true,  prop: 'checkin' },
+  photo:    { label: 'Foto',     emoji: '📷', url: false, prop: null },
+  listen:   { label: 'Listen',   emoji: '🎧', url: true,  prop: 'listen-of' },
+  food:     { label: 'Food',     emoji: '🍽', url: false, prop: null },
+  drink:    { label: 'Drink',    emoji: '🥤', url: false, prop: null }
+};
 
 // Assicura che le cartelle esistano
 fs.mkdirSync(mediaDir, { recursive: true });
@@ -100,6 +121,7 @@ function getSortedPosts() {
 
         let title = '';
         let date = '';
+        let type = 'note';
         let tags = [];
         let bodyContent = content;
 
@@ -125,6 +147,7 @@ function getSortedPosts() {
 
               if (key === 'title') title = val;
               else if (key === 'date') date = val;
+              else if (key === 'type') type = val || 'note';
               else if (key === 'tags') currentKey = 'tags';
               else currentKey = '';
             }
@@ -141,6 +164,7 @@ function getSortedPosts() {
           filename: file,
           title: title || slug,
           date: date || new Date().toISOString(),
+          type,
           tags,
           content: bodyContent.trim()
         });
@@ -155,7 +179,9 @@ function getSortedPosts() {
 
 // 3. Homepage: mostra la lista dei post
 app.get('/', (req, res) => {
-  const posts = getSortedPosts();
+  const filterType = POST_TYPES[req.query.type] ? req.query.type : '';
+  const posts = getSortedPosts().filter(p => !filterType || p.type === filterType);
+
   const postsHtml = posts.map(post => {
     const formattedDate = new Date(post.date).toLocaleDateString('it-IT', {
       year: 'numeric',
@@ -164,11 +190,12 @@ app.get('/', (req, res) => {
     });
 
     const tagsHtml = post.tags.map(tag => `<span class="tag">#${escapeHtml(tag)}</span>`).join(' ');
+    const badge = POST_TYPES[post.type] ? `${POST_TYPES[post.type].emoji} ` : '';
 
     return `
       <article class="post-card">
         <header>
-          <h2><a href="/posts/${encodeURIComponent(post.slug)}">${escapeHtml(post.title)}</a></h2>
+          <h2><a href="/posts/${encodeURIComponent(post.slug)}">${badge}${escapeHtml(post.title)}</a></h2>
           <div class="meta">
             <time>${formattedDate}</time>
             ${tagsHtml ? `<div class="tags">${tagsHtml}</div>` : ''}
@@ -182,13 +209,21 @@ app.get('/', (req, res) => {
     `;
   }).join('\n');
 
+  const filterOptions = ['<option value="">Tutti i tipi</option>']
+    .concat(Object.entries(POST_TYPES).map(([k, t]) =>
+      `<option value="${k}"${k === filterType ? ' selected' : ''}>${t.emoji} ${t.label}</option>`))
+    .join('');
+  const filterBar = `<div class="filter-bar">
+    <select onchange="location.href = this.value ? '/?type=' + this.value : '/'">${filterOptions}</select>
+  </div>`;
+
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>presence — Blog</title>
+    <title>${escapeHtml(SITE_NAME)}</title>
     <link rel="authorization_endpoint" href="/auth">
     <link rel="token_endpoint" href="/token">
     <link rel="micropub" href="/micropub">
@@ -294,25 +329,34 @@ app.get('/', (req, res) => {
             color: #444444;
             text-align: center;
         }
+        .filter-bar { margin-bottom: 30px; }
+        .filter-bar select {
+            appearance: none; -webkit-appearance: none; cursor: pointer;
+            background-color: #0a0a0a; color: #d8d8d8; border: 1px solid #1a1a1a; border-radius: 4px;
+            padding: 8px 34px 8px 12px; font-family: inherit; font-size: 0.8rem;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%2300ff66' d='M2 4l4 4 4-4z'/></svg>");
+            background-repeat: no-repeat; background-position: right 12px center;
+        }
+        .filter-bar select:focus { outline: none; border-color: #00ff66; }
     </style>
 </head>
 <body>
     <!-- Microformats2 h-card per le informazioni del profilo IndieAuth -->
     <div class="h-card" style="display: none;">
-        <a class="p-name u-url" href="https://presence.scobrudot.dev/">scobru</a>
+        <a class="p-name u-url" href="${SITE_URL}/">scobru</a>
         <img class="u-photo" src="https://avatars.githubusercontent.com/u/1079164?v=4" alt="scobru">
         <a class="u-email" href="mailto:dev.scobru@pm.me">dev.scobru@pm.me</a>
     </div>
     <div class="container">
         <header class="main-header">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h1>presence — Blog</h1>
+                <h1>${escapeHtml(SITE_NAME)}</h1>
                 <div class="status"><span class="status-dot"></span>VPS Online</div>
             </div>
-            <p style="color: #888888; font-size: 0.85rem; margin: 0;">
-                Sito personale di <a href="https://scobru.it" style="color: #ffffff;">scobru.it</a>.
-            </p>
+            ${SITE_DESCRIPTION ? `<p style="color: #888888; font-size: 0.85rem; margin: 0;">${escapeHtml(SITE_DESCRIPTION)}</p>` : ''}
         </header>
+
+        ${filterBar}
 
         <main>
             ${postsHtml || '<p style="color: #555555; text-align: center; padding: 40px 0;">Nessun post pubblicato ancora.</p>'}
@@ -515,11 +559,32 @@ const ADMIN_STYLE = `
         button.danger { background: #300; border-color: #500; }
         a { color: #6cf; }
         form.post-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
-        form.post-form input, form.post-form textarea {
+        form.post-form input, form.post-form textarea, form.post-form select {
             background: #0a0a0a; color: #d8d8d8; border: 1px solid #222; padding: 10px;
             font-family: inherit; font-size: 0.9rem; border-radius: 3px;
         }
-        form.post-form button[type=submit] { background: #030; border-color: #050; align-self: flex-start; padding: 8px 18px; }`;
+        form.post-form select {
+            appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 34px;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%236cf' d='M2 4l4 4 4-4z'/></svg>");
+            background-repeat: no-repeat; background-position: right 12px center;
+        }
+        form.post-form select:focus, form.post-form input:focus, form.post-form textarea:focus { outline: none; border-color: #6cf; }
+        form.post-form button[type=submit] { background: #030; border-color: #050; align-self: flex-start; padding: 8px 18px; }
+        .filter-bar { margin: 20px 0; }
+        .filter-bar select {
+            appearance: none; -webkit-appearance: none; cursor: pointer;
+            background: #0a0a0a; color: #d8d8d8; border: 1px solid #222; border-radius: 4px;
+            padding: 8px 34px 8px 12px; font-family: inherit; font-size: 0.85rem;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%2300ff66' d='M2 4l4 4 4-4z'/></svg>");
+            background-repeat: no-repeat; background-position: right 12px center;
+        }`;
+
+// Genera le <option> del selettore di tipo dai POST_TYPES
+function typeOptions(selected) {
+  return Object.entries(POST_TYPES)
+    .map(([k, t]) => `<option value="${k}"${k === selected ? ' selected' : ''}>${t.emoji} ${t.label}</option>`)
+    .join('');
+}
 
 app.get('/admin', requireAdminAuth, (req, res) => {
   const posts = getSortedPosts();
@@ -554,15 +619,8 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     <h1>Nuovo post</h1>
     ${syndNote}
     <form class="post-form" method="POST" action="/admin/posts" enctype="multipart/form-data">
-        <select name="ptype">
-            <option value="note">Nota</option>
-            <option value="article">Articolo</option>
-            <option value="bookmark">Bookmark</option>
-            <option value="reply">Risposta</option>
-            <option value="like">Like</option>
-            <option value="repost">Repost</option>
-        </select>
-        <input name="link" placeholder="URL (per bookmark / reply / like / repost)">
+        <select name="ptype">${typeOptions('note')}</select>
+        <input name="link" placeholder="URL (per bookmark / reply / like / repost / listen / check-in)">
         <input name="title" placeholder="Titolo">
         <input name="tags" placeholder="tag separati da virgola (es: web, indieweb)">
         <textarea name="content" rows="10" placeholder="Contenuto (Markdown)"></textarea>
@@ -617,12 +675,13 @@ export function slugify(str) {
 }
 
 // Costruisce il blocco frontmatter YAML (parser semplice: niente virgolette nei valori)
-function buildFrontmatter({ title, date, tags = [] }) {
+function buildFrontmatter({ title, date, tags = [], type = 'note' }) {
   const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
+  const typeYaml = type && type !== 'note' ? `type: ${type}\n` : '';
   const tagsYaml = tags.length
     ? 'tags:\n' + tags.map(t => `  - "${String(t).replace(/"/g, '')}"`).join('\n') + '\n'
     : '';
-  return `---\n${titleYaml}date: ${date}\n${tagsYaml}---\n`;
+  return `---\n${titleYaml}${typeYaml}date: ${date}\n${tagsYaml}---\n`;
 }
 
 // Aggiunge le immagini in coda al body come Markdown
@@ -633,7 +692,7 @@ function appendPhotos(body, photos = []) {
 }
 
 // Scrive un nuovo post. Ritorna { slug, url } o lancia Error con .status.
-export function writePost({ title, body, tags = [], photos = [] }) {
+export function writePost({ title, body, tags = [], photos = [], type = 'note' }) {
   title = (title || '').trim();
   body = appendPhotos((body || '').trim(), photos);
   tags = tags.map(t => String(t).trim()).filter(Boolean);
@@ -657,7 +716,7 @@ export function writePost({ title, body, tags = [], photos = [] }) {
     throw e;
   }
 
-  fs.writeFileSync(filePath, buildFrontmatter({ title, date: now.toISOString(), tags }) + body + '\n');
+  fs.writeFileSync(filePath, buildFrontmatter({ title, date: now.toISOString(), tags, type }) + body + '\n');
   return { slug, url: `${SITE_URL}/posts/${slug}` };
 }
 
@@ -677,7 +736,7 @@ export function updatePost(filename, { title, body, tags }) {
   const newBody = body !== undefined ? String(body).trim() : existing.content;
   const newTags = tags !== undefined ? tags.map(t => String(t).trim()).filter(Boolean) : existing.tags;
 
-  fs.writeFileSync(filePath, buildFrontmatter({ title: newTitle, date: existing.date, tags: newTags }) + newBody + '\n');
+  fs.writeFileSync(filePath, buildFrontmatter({ title: newTitle, date: existing.date, tags: newTags, type: existing.type }) + newBody + '\n');
   return { slug: existing.slug, url: `${SITE_URL}/posts/${existing.slug}` };
 }
 
@@ -725,13 +784,13 @@ async function syndicateToMastodon({ title, body, url }) {
 }
 
 app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (req, res) => {
+  const type = POST_TYPES[req.body.ptype] ? req.body.ptype : 'note';
   const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
   const photos = (req.files || []).map(mediaUrlFor);
   const link = (req.body.link || '').trim();
-  const prefix = link ? contextLine({ [req.body.ptype]: link }) : '';
-  const body = [prefix, req.body.content].filter(Boolean).join('\n\n');
+  const body = [contextLine(type, link), req.body.content].filter(Boolean).join('\n\n');
   try {
-    const { url } = writePost({ title: req.body.title, body, tags, photos });
+    const { url } = writePost({ title: req.body.title, body, tags, photos, type });
     await syndicateToMastodon({ title: req.body.title, body, url });
     res.redirect('/admin');
   } catch (e) {
@@ -937,15 +996,12 @@ function photoUrls(photo) {
     .filter(Boolean);
 }
 
-// Rende i tipi di post IndieWeb (bookmark, like, reply, repost, RSVP) come riga
-// Markdown da mettere in cima al post. Ritorna '' per una nota/articolo normale.
-export function contextLine({ bookmark, like, repost, reply, rsvp } = {}) {
-  const l = u => `[${u}](${u})`;
-  if (bookmark) return `🔖 Bookmark: ${l(bookmark)}`;
-  if (like) return `👍 Like: ${l(like)}`;
-  if (repost) return `🔁 Repost: ${l(repost)}`;
-  if (reply) return rsvp ? `📅 RSVP **${rsvp}**: ${l(reply)}` : `↩ In risposta a ${l(reply)}`;
-  return '';
+// Rende un tipo di post IndieWeb come riga Markdown in cima al post.
+// Ritorna '' per note/articolo/foto (nessun URL di riferimento).
+export function contextLine(type, link) {
+  const t = POST_TYPES[type];
+  if (!t || !t.url || !link) return '';
+  return `${t.emoji} ${t.label}: [${link}](${link})`;
 }
 
 // --- Micropub: normalizza create da form-encoded o JSON (mf2) ---
@@ -957,17 +1013,17 @@ function parseMicropubCreate(body) {
   if (content && typeof content === 'object') content = content.html || content.value || '';
   content = String(content || '');
 
-  const prefix = contextLine({
-    bookmark: first(p['bookmark-of']),
-    like: first(p['like-of']),
-    repost: first(p['repost-of']),
-    reply: first(p['in-reply-to']),
-    rsvp: first(p.rsvp)
-  });
+  // Deduce il tipo dalla proprietà mf2 presente (bookmark-of, like-of, ...)
+  let type = 'note';
+  let link = '';
+  for (const [name, t] of Object.entries(POST_TYPES)) {
+    if (t.prop && p[t.prop] !== undefined) { type = name; link = first(p[t.prop]); break; }
+  }
 
   return {
+    type,
     title: first(p.name) || '',
-    body: [prefix, content].filter(Boolean).join('\n\n'),
+    body: [contextLine(type, link), content].filter(Boolean).join('\n\n'),
     tags: [].concat(p.category || p['category[]'] || []).filter(Boolean),
     photos: photoUrls(p.photo || p['photo[]'])
   };

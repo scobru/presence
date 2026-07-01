@@ -14,9 +14,10 @@ process.env.POSTS_DIR = path.join(os.tmpdir(), 'presence-selftest-posts');
 const { signToken, verifyToken, pkceS256, slugify, contextLine } = await import('./server.js');
 
 // contextLine: tipi di post IndieWeb
-assert(contextLine({ bookmark: 'https://x.com' }) === '🔖 Bookmark: [https://x.com](https://x.com)', 'bookmark');
-assert(contextLine({ reply: 'https://x.com', rsvp: 'yes' }).includes('RSVP **yes**'), 'rsvp');
-assert(contextLine({}) === '', 'nota normale = nessun prefisso');
+assert(contextLine('bookmark', 'https://x.com') === '🔖 Bookmark: [https://x.com](https://x.com)', 'bookmark');
+assert(contextLine('like', 'https://y.com') === '👍 Like: [https://y.com](https://y.com)', 'like');
+assert(contextLine('note', 'ignorato') === '', 'nota = nessun prefisso');
+assert(contextLine('bookmark', '') === '', 'senza link = nessun prefisso');
 
 const now = Math.floor(Date.now() / 1000);
 
