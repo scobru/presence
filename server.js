@@ -68,7 +68,11 @@ const POST_TYPES = {
   photo:    { label: 'Photo',    emoji: '📷', url: false, prop: null,           verb: '' },
   listen:   { label: 'Listen',   emoji: '🎧', url: true,  prop: 'listen-of',    verb: 'Listening to' },
   food:     { label: 'Food',     emoji: '🍽', url: false, prop: null,           verb: 'Eating', lead: true },
-  drink:    { label: 'Drink',    emoji: '🥤', url: false, prop: null,           verb: 'Drinking', lead: true }
+  drink:    { label: 'Drink',    emoji: '🥤', url: false, prop: null,           verb: 'Drinking', lead: true },
+  film:     { label: 'Film',     emoji: '🎬', url: false, prop: null,           verb: 'Watching', lead: true },
+  game:     { label: 'Games',    emoji: '🎮', url: false, prop: null,           verb: 'Playing', lead: true },
+  software: { label: 'Software', emoji: '💻', url: false, prop: null,           verb: 'Using', lead: true },
+  read:     { label: 'Book',     emoji: '📚', url: false, prop: null,           verb: 'Reading', lead: true }
 };
 
 // Ensure directories exist
