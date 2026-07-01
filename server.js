@@ -24,26 +24,50 @@ const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 giorni
 const SITE_NAME = process.env.SITE_NAME || 'presence';
 const SITE_DESCRIPTION = process.env.SITE_DESCRIPTION || '';
 
+// Light mode: attivato quando <html data-theme="light">. Il tema iniziale segue
+// l'OS (o la scelta salvata) via THEME_UI; il bottone 🌓 lo commuta e lo persiste.
+const LIGHT_CSS = `
+html[data-theme="light"] body { background-color: #fbfbfb !important; color: #1f1f1f !important; }
+html[data-theme="light"] .post-card, html[data-theme="light"] .box { background-color: #ffffff !important; border-color: #e5e5e5 !important; box-shadow: 0 1px 4px rgba(0,0,0,0.08) !important; }
+html[data-theme="light"] h1, html[data-theme="light"] h2 a, html[data-theme="light"] .post-card h2 a, html[data-theme="light"] .content h2, html[data-theme="light"] .content h3 { color: #111111 !important; }
+html[data-theme="light"] a { color: #0066cc !important; }
+html[data-theme="light"] .meta, html[data-theme="light"] .tag, html[data-theme="light"] footer { color: #777777 !important; }
+html[data-theme="light"] .content { color: #333333 !important; }
+html[data-theme="light"] .content code { background: #f0f0f0 !important; color: #c7254e !important; border-color: #e0e0e0 !important; }
+html[data-theme="light"] .content pre { background: #f6f6f6 !important; border-color: #e5e5e5 !important; }
+html[data-theme="light"] input, html[data-theme="light"] textarea, html[data-theme="light"] select { background-color: #ffffff !important; color: #222222 !important; border-color: #cccccc !important; }
+html[data-theme="light"] table td, html[data-theme="light"] table th { border-color: #e5e5e5 !important; }
+html[data-theme="light"] button, html[data-theme="light"] a.btn { background: #eee !important; color: #111 !important; border-color: #ccc !important; }
+html[data-theme="light"] button.danger { background: #fdd !important; border-color: #f99 !important; color: #900 !important; }
+html[data-theme="light"] header.main-header { border-color: #e5e5e5 !important; }
+html[data-theme="light"] .theme-toggle { color: #333 !important; border-color: #ccc !important; }`;
+
+// Bottone di commutazione tema + init inline (evita flash: legge la scelta salvata o l'OS).
+const THEME_UI = `
+<button class="theme-toggle" title="Cambia tema" aria-label="Cambia tema" onclick="(function(d){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);localStorage.setItem('theme',n)})(document.documentElement)" style="position:fixed;top:12px;right:12px;z-index:10;background:transparent;border:1px solid #444;color:#aaa;border-radius:6px;padding:6px 9px;cursor:pointer;font-size:1rem;line-height:1">🌓</button>
+<script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)}catch(e){}})()</script>`;
+
 // Syndication Mastodon (opzionale): attiva solo se entrambe le variabili sono presenti
 const MASTODON_URL = (process.env.MASTODON_URL || '').replace(/\/+$/, '');
 const MASTODON_TOKEN = process.env.MASTODON_ACCESS_TOKEN || '';
 const MASTODON_USER = process.env.MASTODON_USER || '';
 
 // Tipi di post IndieWeb — sorgente unica per composer, rendering e filtro homepage.
-// url:true → il tipo richiede un URL di riferimento (bookmark-of, like-of, ecc.)
+// url:true → richiede un URL di riferimento; verb = frase mostrata in cima al post;
+// lead:true → tipo senza URL ma con riga di intestazione dedicata (food/drink).
 const POST_TYPES = {
-  note:     { label: 'Nota',     emoji: '📝', url: false, prop: null },
-  article:  { label: 'Articolo', emoji: '📄', url: false, prop: null },
-  bookmark: { label: 'Bookmark', emoji: '🔖', url: true,  prop: 'bookmark-of' },
-  reply:    { label: 'Risposta', emoji: '↩',  url: true,  prop: 'in-reply-to' },
-  rsvp:     { label: 'RSVP',     emoji: '📅', url: true,  prop: 'in-reply-to' },
-  repost:   { label: 'Repost',   emoji: '🔁', url: true,  prop: 'repost-of' },
-  like:     { label: 'Like',     emoji: '👍', url: true,  prop: 'like-of' },
-  checkin:  { label: 'Check-in', emoji: '📍', url: true,  prop: 'checkin' },
-  photo:    { label: 'Foto',     emoji: '📷', url: false, prop: null },
-  listen:   { label: 'Listen',   emoji: '🎧', url: true,  prop: 'listen-of' },
-  food:     { label: 'Food',     emoji: '🍽', url: false, prop: null },
-  drink:    { label: 'Drink',    emoji: '🥤', url: false, prop: null }
+  note:     { label: 'Nota',     emoji: '📝', url: false, prop: null,           verb: '' },
+  article:  { label: 'Articolo', emoji: '📄', url: false, prop: null,           verb: '' },
+  bookmark: { label: 'Bookmark', emoji: '🔖', url: true,  prop: 'bookmark-of',  verb: 'Segnalibro:' },
+  reply:    { label: 'Risposta', emoji: '↩',  url: true,  prop: 'in-reply-to',  verb: 'In risposta a' },
+  rsvp:     { label: 'RSVP',     emoji: '📅', url: true,  prop: 'in-reply-to',  verb: 'Partecipo a' },
+  repost:   { label: 'Repost',   emoji: '🔁', url: true,  prop: 'repost-of',    verb: 'Condiviso da' },
+  like:     { label: 'Like',     emoji: '👍', url: true,  prop: 'like-of',      verb: 'Mi piace:' },
+  checkin:  { label: 'Check-in', emoji: '📍', url: true,  prop: 'checkin',      verb: 'Sono a' },
+  photo:    { label: 'Foto',     emoji: '📷', url: false, prop: null,           verb: '' },
+  listen:   { label: 'Listen',   emoji: '🎧', url: true,  prop: 'listen-of',    verb: 'Sto ascoltando' },
+  food:     { label: 'Food',     emoji: '🍽', url: false, prop: null,           verb: 'Sto mangiando', lead: true },
+  drink:    { label: 'Drink',    emoji: '🥤', url: false, prop: null,           verb: 'Sto bevendo',   lead: true }
 };
 
 // Assicura che le cartelle esistano
@@ -338,9 +362,11 @@ app.get('/', (req, res) => {
             background-repeat: no-repeat; background-position: right 12px center;
         }
         .filter-bar select:focus { outline: none; border-color: #00ff66; }
+        ${LIGHT_CSS}
     </style>
 </head>
 <body>
+    ${THEME_UI}
     <!-- Microformats2 h-card per le informazioni del profilo IndieAuth -->
     <div class="h-card" style="display: none;">
         <a class="p-name u-url" href="${SITE_URL}/">scobru</a>
@@ -494,9 +520,11 @@ app.get('/posts/:slug', (req, res) => {
             color: #444444;
             text-align: center;
         }
+        ${LIGHT_CSS}
     </style>
 </head>
 <body>
+    ${THEME_UI}
     <!-- Microformats2 h-card per le informazioni del profilo IndieAuth -->
     <div class="h-card" style="display: none;">
         <a class="p-name u-url" href="https://presence.scobrudot.dev/">scobru</a>
@@ -508,7 +536,7 @@ app.get('/posts/:slug', (req, res) => {
         
         <article>
             <header>
-                <h1>${escapeHtml(post.title)}</h1>
+                <h1>${POST_TYPES[post.type] ? POST_TYPES[post.type].emoji + ' ' : ''}${escapeHtml(post.title)}</h1>
                 <div class="meta">
                     <time>${formattedDate}</time>
                     ${tagsHtml ? `<div class="tags">${tagsHtml}</div>` : ''}
@@ -577,7 +605,8 @@ const ADMIN_STYLE = `
             padding: 8px 34px 8px 12px; font-family: inherit; font-size: 0.85rem;
             background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%2300ff66' d='M2 4l4 4 4-4z'/></svg>");
             background-repeat: no-repeat; background-position: right 12px center;
-        }`;
+        }
+        ${LIGHT_CSS}`;
 
 // Genera le <option> del selettore di tipo dai POST_TYPES
 function typeOptions(selected) {
@@ -616,6 +645,7 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     <style>${ADMIN_STYLE}</style>
 </head>
 <body>
+    ${THEME_UI}
     <h1>Nuovo post</h1>
     ${syndNote}
     <form class="post-form" method="POST" action="/admin/posts" enctype="multipart/form-data">
@@ -652,6 +682,7 @@ app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
     <style>${ADMIN_STYLE}</style>
 </head>
 <body>
+    ${THEME_UI}
     <p><a href="/admin">← Torna all'admin</a></p>
     <h1>Modifica post</h1>
     <form class="post-form" method="POST" action="/admin/posts/${encodeURIComponent(filename)}">
@@ -917,7 +948,8 @@ app.get('/auth', (req, res) => {
   ul { padding-left:18px; } li { margin-bottom:4px; }
   input[type=password] { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #333; padding:10px; margin:12px 0; border-radius:4px; }
   button { background:#06c; color:#fff; border:0; padding:10px 20px; border-radius:4px; cursor:pointer; width:100%; font-size:1rem; }
-</style></head><body><div class="box">
+  ${LIGHT_CSS}
+</style></head><body>${THEME_UI}<div class="box">
   <h1>Autorizza applicazione</h1>
   <p><code>${escapeHtml(client_id)}</code> chiede accesso a <code>${escapeHtml(hidden.me)}</code></p>
   ${scopeList.length ? `<p>Permessi:</p><ul>${scopeList.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>` : '<p>Solo autenticazione (nessun permesso di scrittura).</p>'}
@@ -997,11 +1029,15 @@ function photoUrls(photo) {
 }
 
 // Rende un tipo di post IndieWeb come riga Markdown in cima al post.
-// Ritorna '' per note/articolo/foto (nessun URL di riferimento).
+// - tipi con URL: "emoji verbo [link](link)" (solo se link presente)
+// - tipi "lead" senza URL (food/drink): "emoji verbo" come intestazione
+// - note/articolo/foto: nessun prefisso
 export function contextLine(type, link) {
   const t = POST_TYPES[type];
-  if (!t || !t.url || !link) return '';
-  return `${t.emoji} ${t.label}: [${link}](${link})`;
+  if (!t) return '';
+  if (t.url) return link ? `${t.emoji} ${t.verb} [${link}](${link})` : '';
+  if (t.lead) return `**${t.emoji} ${t.verb}**`;
+  return '';
 }
 
 // --- Micropub: normalizza create da form-encoded o JSON (mf2) ---
