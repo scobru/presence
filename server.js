@@ -14,10 +14,11 @@ const PORT = process.env.PORT || 3000;
 const postsDir = process.env.POSTS_DIR || path.join(__dirname, 'posts');
 const mediaDir = path.join(postsDir, 'media');
 
-// Identità del sito (valore `me` di IndieAuth) e segreto per firmare i token
+// Site identity (IndieAuth `me` value) and secret to sign tokens
 const SITE_URL = (process.env.ME || 'https://presence.scobrudot.dev').replace(/\/+$/, '');
 const SECRET = process.env.SECRET || process.env.INDIEAUTH_SECRET || '';
 const AUTH_PASSWORD = process.env.ADMIN_PASSWORD || '';
+<<<<<<< HEAD
 const AUTH_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
 const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 giorni
 
@@ -100,8 +101,23 @@ function mediaUrlFor(file) {
   const rel = path.relative(mediaDir, file.path).split(path.sep).join('/');
   return `${SITE_URL}/media/${rel}`;
 }
+=======
+const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days
 
-// Helper per escapare HTML (titoli, tag, slug provengono da contenuto utente via Micropub)
+// Ensure the posts folder exists
+if (!fs.existsSync(postsDir)) {
+  fs.mkdirSync(postsDir, { recursive: true });
+}
+
+// Serve uploaded media as static files
+app.use('/media', express.static(path.join(postsDir, 'media')));
+// Serve favicon
+app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
+app.get('/favicon.png', (req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
+
+
+// Helper to escape HTML (titles, tags, slugs come from user content via Micropub)
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -110,7 +126,7 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// Helper per compilare Markdown in HTML (sicuro e nativo)
+// Helper to compile Markdown to HTML (safe and native)
 function renderMarkdown(md) {
   if (!md) return '';
   let html = md
@@ -134,7 +150,7 @@ function renderMarkdown(md) {
   return html;
 }
 
-// Helper per leggere e ordinare tutti i post dal disco
+// Helper to read and sort all posts from disk
 function getSortedPosts() {
   if (!fs.existsSync(postsDir)) return [];
   const files = fs.readdirSync(postsDir);
@@ -197,7 +213,7 @@ function getSortedPosts() {
           content: bodyContent.trim()
         });
       } catch (e) {
-        console.error(`Errore nel parsing del file ${file}:`, e);
+        console.error(`Error parsing file ${file}:`, e);
       }
     }
   }
@@ -205,13 +221,13 @@ function getSortedPosts() {
   return posts.sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-// 3. Homepage: mostra la lista dei post
+// 3. Homepage: show the list of posts
 app.get('/', (req, res) => {
   const filterType = POST_TYPES[req.query.type] ? req.query.type : '';
   const posts = getSortedPosts().filter(p => !filterType || p.type === filterType);
 
   const postsHtml = posts.map(post => {
-    const formattedDate = new Date(post.date).toLocaleDateString('it-IT', {
+    const formattedDate = new Date(post.date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -232,7 +248,7 @@ app.get('/', (req, res) => {
         <div class="post-preview">
           ${renderMarkdown(post.content.length > 250 ? post.content.substring(0, 250) + '...' : post.content)}
         </div>
-        ${post.content.length > 250 ? `<a href="/posts/${encodeURIComponent(post.slug)}" class="read-more">Leggi tutto →</a>` : ''}
+        ${post.content.length > 250 ? `<a href="/posts/${encodeURIComponent(post.slug)}" class="read-more">Read more →</a>` : ''}
       </article>
     `;
   }).join('\n');
@@ -247,8 +263,9 @@ app.get('/', (req, res) => {
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="/favicon.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(SITE_NAME)}</title>
@@ -383,13 +400,19 @@ app.get('/', (req, res) => {
                 <h1>${escapeHtml(SITE_NAME)}</h1>
                 <div class="status"><span class="status-dot"></span>VPS Online</div>
             </div>
+<<<<<<< HEAD
             ${SITE_DESCRIPTION ? `<p style="color: #888888; font-size: 0.85rem; margin: 0;">${escapeHtml(SITE_DESCRIPTION)}</p>` : ''}
+=======
+            <p style="color: #888888; font-size: 0.85rem; margin: 0;">
+                Personal website of <a href="https://scobru.it" style="color: #ffffff;">scobru.it</a>.
+            </p>
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
         </header>
 
         ${filterBar}
 
         <main>
-            ${postsHtml || '<p style="color: #555555; text-align: center; padding: 40px 0;">Nessun post pubblicato ancora.</p>'}
+            ${postsHtml || '<p style="color: #555555; text-align: center; padding: 40px 0;">No posts published yet.</p>'}
         </main>
 
         <footer>
@@ -400,17 +423,17 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// 4. Pagina singolo post
+// 4. Single post page
 app.get('/posts/:slug', (req, res) => {
   const { slug } = req.params;
   const posts = getSortedPosts();
   const post = posts.find(p => p.slug === slug);
 
   if (!post) {
-    return res.status(404).send('Post non trovato.');
+    return res.status(404).send('Post not found.');
   }
 
-  const formattedDate = new Date(post.date).toLocaleDateString('it-IT', {
+  const formattedDate = new Date(post.date).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -422,8 +445,9 @@ app.get('/posts/:slug', (req, res) => {
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="/favicon.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(post.title)} — presence</title>
@@ -536,7 +560,7 @@ app.get('/posts/:slug', (req, res) => {
         <a class="u-email" href="mailto:dev.scobru@pm.me">dev.scobru@pm.me</a>
     </div>
     <div class="container">
-        <a href="/" class="back-link">← Torna alla homepage</a>
+        <a href="/" class="back-link">← Back to homepage</a>
         
         <article>
             <header>
@@ -553,14 +577,14 @@ app.get('/posts/:slug', (req, res) => {
         </article>
 
         <footer>
-            // post renderizzato da presence-frontend
+            // post rendered by presence-frontend
         </footer>
     </div>
 </body>
 </html>`);
 });
 
-// 5. Admin UI: lista post + cancellazione. Protetta da Basic Auth.
+// 5. Admin UI: post list + deletion. Protected by Basic Auth.
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 
 function requireAdminAuth(req, res, next) {
@@ -573,7 +597,7 @@ function requireAdminAuth(req, res, next) {
     : [];
   if (user !== ADMIN_USER || !checkAdminPassword(pass)) {
     res.setHeader('WWW-Authenticate', 'Basic realm="presence admin"');
-    return res.status(401).send('Autenticazione richiesta.');
+    return res.status(401).send('Authentication required.');
   }
   next();
 }
@@ -626,12 +650,18 @@ app.get('/admin', requireAdminAuth, (req, res) => {
       <td>${escapeHtml(String(post.date).slice(0, 10))}</td>
       <td class="tag">${post.tags.map(t => '#' + escapeHtml(t)).join(' ')}</td>
       <td>
+<<<<<<< HEAD
         <div class="actions">
           <a class="btn" href="/admin/posts/${encodeURIComponent(post.filename)}/edit">Modifica</a>
           <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Cancellare questo post?');">
             <button class="danger" type="submit">Cancella</button>
           </form>
         </div>
+=======
+        <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Delete this post?');">
+          <button type="submit">Delete</button>
+        </form>
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
       </td>
     </tr>`).join('\n');
 
@@ -641,13 +671,15 @@ app.get('/admin', requireAdminAuth, (req, res) => {
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="/favicon.png">
     <meta charset="UTF-8">
     <title>Admin — presence</title>
     <style>${ADMIN_STYLE}</style>
 </head>
 <body>
+<<<<<<< HEAD
     ${THEME_UI}
     <h1>Nuovo post</h1>
     ${syndNote}
@@ -659,17 +691,31 @@ app.get('/admin', requireAdminAuth, (req, res) => {
         <textarea name="content" rows="10" placeholder="Contenuto (Markdown)"></textarea>
         <input type="file" name="photo" accept="image/*" multiple>
         <button type="submit">Pubblica</button>
+=======
+    <h1>New post</h1>
+    <form class="new-post" method="POST" action="/admin/posts">
+        <input name="title" placeholder="Title" required>
+        <input name="tags" placeholder="comma-separated tags (e.g., web, indieweb)">
+        <textarea name="content" rows="10" placeholder="Content (Markdown)" required></textarea>
+        <button type="submit">Publish</button>
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
     </form>
 
-    <h1>Post pubblicati (${posts.length})</h1>
+    <h1>Published posts (${posts.length})</h1>
     <table>
+<<<<<<< HEAD
         <tr><th>Titolo</th><th>Data</th><th>Tag</th><th></th></tr>
         ${rowsHtml || '<tr><td colspan="4">Nessun post.</td></tr>'}
+=======
+        <tr><th>Title</th><th>Date</th><th></th></tr>
+        ${rowsHtml || '<tr><td colspan="3">No posts.</td></tr>'}
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
     </table>
 </body>
 </html>`);
 });
 
+<<<<<<< HEAD
 // Pagina di modifica di un post esistente
 app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
   const filename = path.basename(req.params.filename);
@@ -699,6 +745,9 @@ app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
 });
 
 // Genera uno slug sicuro per il filesystem da un titolo
+=======
+// Generate a filesystem-safe slug from a title
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
 export function slugify(str) {
   return String(str)
     .toLowerCase()
@@ -708,6 +757,7 @@ export function slugify(str) {
     .slice(0, 60);
 }
 
+<<<<<<< HEAD
 // Costruisce il blocco frontmatter YAML (parser semplice: niente virgolette nei valori)
 function buildFrontmatter({ title, date, tags = [], type = 'note' }) {
   const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
@@ -727,29 +777,36 @@ function appendPhotos(body, photos = []) {
 
 // Scrive un nuovo post. Ritorna { slug, url } o lancia Error con .status.
 export function writePost({ title, body, tags = [], photos = [], type = 'note' }) {
+=======
+// Writes a post to disk as a Markdown file with frontmatter.
+// Used by both the /admin UI and the Micropub endpoint.
+// Returns { slug, url } or throws an Error with .status.
+export function writePost({ title, body, tags = [] }) {
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
   title = (title || '').trim();
   body = appendPhotos((body || '').trim(), photos);
   tags = tags.map(t => String(t).trim()).filter(Boolean);
 
   if (!body) {
-    const e = new Error('Il contenuto è obbligatorio.');
+    const e = new Error('Content is required.');
     e.status = 400;
     throw e;
   }
 
   const now = new Date();
   const datePart = now.toISOString().slice(0, 10);
-  // Una nota senza titolo (es. da client Micropub) usa il timestamp come slug
+  // A note without a title (e.g. from a Micropub client) uses the timestamp as a slug
   const slug = slugify(title) || String(now.getTime());
   const filename = `${datePart}-${slug}.md`;
   const filePath = path.join(postsDir, filename);
 
   if (fs.existsSync(filePath)) {
-    const e = new Error('Esiste già un post con questo slug per oggi.');
+    const e = new Error('A post with this slug already exists for today.');
     e.status = 409;
     throw e;
   }
 
+<<<<<<< HEAD
   fs.writeFileSync(filePath, buildFrontmatter({ title, date: now.toISOString(), tags, type }) + body + '\n');
   return { slug, url: `${SITE_URL}/posts/${slug}` };
 }
@@ -775,6 +832,20 @@ export function updatePost(filename, { title, body, tags }) {
 }
 
 // Cancella un post dato il suo URL pubblico (es. https://site/posts/slug)
+=======
+  // Remove double quotes: the frontmatter parser in getSortedPosts is simple
+  const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
+  const tagsYaml = tags.length
+    ? 'tags:\n' + tags.map(t => `  - "${t.replace(/"/g, '')}"`).join('\n') + '\n'
+    : '';
+  const frontmatter = `---\n${titleYaml}date: ${now.toISOString()}\n${tagsYaml}---\n`;
+
+  fs.writeFileSync(filePath, frontmatter + body + '\n');
+  return { slug, url: `${SITE_URL}/posts/${slug}` };
+}
+
+// Delete un post dato il suo URL pubblico (es. https://site/posts/slug)
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
 function deletePostByUrl(url) {
   const post = findPostByUrl(url);
   if (!post) return false;
@@ -937,7 +1008,7 @@ app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
   const filePath = path.join(postsDir, filename);
 
   if (!filename.endsWith('.md') || path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) {
-    return res.status(404).send('Post non trovato.');
+    return res.status(404).send('Post not found.');
   }
 
   fs.unlinkSync(filePath);
@@ -945,17 +1016,17 @@ app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
 });
 
 // ============================================================
-// IndieAuth (authorization + token endpoint) e Micropub nativi
+// Native IndieAuth (authorization + token endpoint) and Micropub
 // Spec: https://indieauth.spec.indieweb.org/ e https://www.w3.org/TR/micropub/
 // ============================================================
 
-// --- Helper crittografici ---
+// --- Cryptographic helpers ---
 function b64url(buf) {
   return Buffer.from(buf).toString('base64')
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// Access token = JWT firmato HMAC-SHA256, stateless (nessun DB richiesto)
+// Access token = HMAC-SHA256 signed JWT, stateless (no DB required)
 export function signToken(payload) {
   const body = b64url(JSON.stringify(payload));
   const sig = b64url(crypto.createHmac('sha256', SECRET).update(body).digest());
@@ -988,6 +1059,7 @@ function timingEqual(a, b) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
+<<<<<<< HEAD
 // Hash della password: scrypt salato, formato "scrypt:<salt_hex>:<hash_hex>".
 // Generato dalla pagina di setup /auth/new-password e messo in ADMIN_PASSWORD_HASH.
 function hashPassword(plain) {
@@ -1014,6 +1086,11 @@ function checkAdminPassword(candidate) {
 // Codici di autorizzazione: vita breve (10 min), uso singolo, in memoria.
 // ponytail: Map in memoria — se il container riavvia durante il login, rifai l'accesso.
 // Per single-user va bene; se serve multi-istanza, sposta su store condiviso.
+=======
+// Authorization codes: short-lived (10 min), single-use, in memory.
+// ponytail: In-memory Map — if the container restarts during login, log in again.
+// Fine for single-user; if multi-instance is needed, move to a shared store.
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
 const authCodes = new Map();
 
 function hasScope(token, scope) {
@@ -1031,8 +1108,13 @@ function bearer(req) {
 }
 
 function requireConfigured(req, res, next) {
+<<<<<<< HEAD
   if (!SECRET || (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH)) {
     return res.status(503).json({ error: 'service_unavailable', error_description: 'Imposta SECRET e ADMIN_PASSWORD (o ADMIN_PASSWORD_HASH) per abilitare IndieAuth/Micropub.' });
+=======
+  if (!SECRET || !AUTH_PASSWORD) {
+    return res.status(503).json({ error: 'service_unavailable', error_description: 'Set SECRET and ADMIN_PASSWORD to enable IndieAuth/Micropub.' });
+>>>>>>> 5ff3037 (feat: translate app to English and add favicon)
   }
   next();
 }
@@ -1078,12 +1160,12 @@ app.post('/auth/new-password', express.urlencoded({ extended: false }), (req, re
 
 app.use(['/auth', '/token', '/micropub', '/media'], express.urlencoded({ extended: false }), express.json(), requireConfigured);
 
-// --- Authorization endpoint: pagina di consenso ---
+// --- Authorization endpoint: consent page ---
 app.get('/auth', (req, res) => {
   const { client_id, redirect_uri, state, code_challenge, code_challenge_method, scope, me } = req.query;
 
   if (!client_id || !redirect_uri || !code_challenge || code_challenge_method !== 'S256') {
-    return res.status(400).send('Richiesta di autorizzazione non valida (richiesto client_id, redirect_uri, code_challenge, code_challenge_method=S256).');
+    return res.status(400).send('Invalid authorization request (client_id, redirect_uri, code_challenge, code_challenge_method=S256 required).');
   }
 
   const hidden = { client_id, redirect_uri, state, code_challenge, code_challenge_method, scope: scope || '', me: me || SITE_URL };
@@ -1093,7 +1175,8 @@ app.get('/auth', (req, res) => {
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
-<html lang="it"><head><meta charset="UTF-8"><title>Autorizza — presence</title>
+<html lang="en"><head>
+    <link rel="icon" type="image/png" href="/favicon.png"><meta charset="UTF-8"><title>Authorize — presence</title>
 <style>
   body { background:#050505; color:#d8d8d8; font-family:ui-monospace,monospace; max-width:420px; margin:60px auto; padding:0 20px; }
   .box { border:1px solid #222; background:#0a0a0a; padding:25px; border-radius:6px; }
@@ -1104,26 +1187,26 @@ app.get('/auth', (req, res) => {
   button { background:#06c; color:#fff; border:0; padding:10px 20px; border-radius:4px; cursor:pointer; width:100%; font-size:1rem; }
   ${LIGHT_CSS}
 </style></head><body>${THEME_UI}<div class="box">
-  <h1>Autorizza applicazione</h1>
-  <p><code>${escapeHtml(client_id)}</code> chiede accesso a <code>${escapeHtml(hidden.me)}</code></p>
-  ${scopeList.length ? `<p>Permessi:</p><ul>${scopeList.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>` : '<p>Solo autenticazione (nessun permesso di scrittura).</p>'}
+  <h1>Authorize application</h1>
+  <p><code>${escapeHtml(client_id)}</code> requests access to <code>${escapeHtml(hidden.me)}</code></p>
+  ${scopeList.length ? `<p>Permissions:</p><ul>${scopeList.map(s => `<li>${escapeHtml(s)}</li>`).join('')}</ul>` : '<p>Authentication only (no write permissions).</p>'}
   <form method="POST" action="/auth">
     ${hiddenHtml}
     <input type="password" name="password" placeholder="Password" autofocus required>
-    <button type="submit">Consenti</button>
+    <button type="submit">Allow</button>
   </form>
 </div></body></html>`);
 });
 
-// --- Authorization endpoint: approvazione → emette il codice ---
+// --- Authorization endpoint: approval → emits the code ---
 app.post('/auth', (req, res) => {
   const { password, client_id, redirect_uri, state, code_challenge, code_challenge_method, scope } = req.body;
 
   if (!checkAdminPassword(password)) {
-    return res.status(401).send('Password errata.');
+    return res.status(401).send('Incorrect password.');
   }
   if (!client_id || !redirect_uri || !code_challenge || code_challenge_method !== 'S256') {
-    return res.status(400).send('Parametri di autorizzazione mancanti.');
+    return res.status(400).send('Missing authorization parameters.');
   }
 
   const code = b64url(crypto.randomBytes(32));
@@ -1139,18 +1222,18 @@ app.post('/auth', (req, res) => {
   res.redirect(`${redirect_uri}${sep}${qs}`);
 });
 
-// Scambia un codice di autorizzazione verificando la PKCE. Ritorna i dati o null.
+// Exchanges an authorization code by verifying PKCE. Returns the data or null.
 function redeemCode({ code, client_id, redirect_uri, code_verifier }) {
   const data = authCodes.get(code);
   if (!data) return null;
-  authCodes.delete(code); // uso singolo
+  authCodes.delete(code); // single use
   if (data.exp < Date.now()) return null;
   if (data.client_id !== client_id || data.redirect_uri !== redirect_uri) return null;
   if (!timingEqual(pkceS256(code_verifier || ''), data.code_challenge)) return null;
   return data;
 }
 
-// --- Token endpoint: scambia codice → access token ---
+// --- Token endpoint: exchange code → access token ---
 app.post('/token', (req, res) => {
   const { grant_type, code, client_id, redirect_uri, code_verifier } = req.body;
 
@@ -1168,24 +1251,24 @@ app.post('/token', (req, res) => {
   res.json({ access_token, token_type: 'Bearer', scope: data.scope, me: data.me });
 });
 
-// --- Token endpoint: verifica token (usato da alcuni client) ---
+// --- Token endpoint: verify token (used by some clients) ---
 app.get('/token', (req, res) => {
   const token = verifyToken(bearer(req));
   if (!token) return res.status(401).json({ error: 'unauthorized' });
   res.json({ me: token.me, client_id: token.client_id, scope: token.scope });
 });
 
-// Estrae gli URL delle foto da una proprietà mf2 (stringa, {value}, o array misto)
+// Extracts photo URLs from an mf2 property (string, {value}, or mixed array)
 function photoUrls(photo) {
   return [].concat(photo || [])
     .map(p => (p && typeof p === 'object' ? p.value : p))
     .filter(Boolean);
 }
 
-// Rende un tipo di post IndieWeb come riga Markdown in cima al post.
-// - tipi con URL: "emoji verbo [link](link)" (solo se link presente)
-// - tipi "lead" senza URL (food/drink): "emoji verbo" come intestazione
-// - note/articolo/foto: nessun prefisso
+// Renders an IndieWeb post type as a Markdown line at the top of the post.
+// - types with URL: "emoji verb [link](link)" (only if link is present)
+// - "lead" types without URL (food/drink): "emoji verb" as heading
+// - note/article/photo: no prefix
 export function contextLine(type, link) {
   const t = POST_TYPES[type];
   if (!t) return '';
@@ -1194,7 +1277,7 @@ export function contextLine(type, link) {
   return '';
 }
 
-// --- Micropub: normalizza create da form-encoded o JSON (mf2) ---
+// --- Micropub: normalize create from form-encoded or JSON (mf2) ---
 function parseMicropubCreate(body) {
   const p = body.type ? (body.properties || {}) : body; // JSON mf2 vs form-encoded
   const first = v => (Array.isArray(v) ? v[0] : v);
@@ -1325,19 +1408,20 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       return ok ? res.status(204).end() : res.status(404).json({ error: 'not_found' });
     }
 
-    return res.status(501).json({ error: 'not_implemented', error_description: `Azione '${action}' non supportata.` });
+    // update / undelete not implemented: posts are Markdown files, they are edited from /admin
+    return res.status(501).json({ error: 'not_implemented', error_description: `Action '${action}' not supported.` });
   } catch (e) {
     return res.status(e.status || 500).json({ error: 'invalid_request', error_description: e.message });
   }
 });
 
-// Avvia il server solo se eseguito direttamente (non in import, es. dai test)
+// Start the server only if executed directly (not in import, e.g. from tests)
 if (process.argv[1] === __filename) {
   app.listen(PORT, () => {
     if (!SECRET || (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH)) {
-      console.warn('ATTENZIONE: SECRET o ADMIN_PASSWORD/ADMIN_PASSWORD_HASH non impostati — IndieAuth/Micropub e /admin restano disabilitati. Visita /auth/new-password per generare un hash.');
+      console.warn('WARNING: SECRET or ADMIN_PASSWORD/ADMIN_PASSWORD_HASH not set — IndieAuth/Micropub and /admin remain disabled. Visit /auth/new-password to generate a hash.');
     }
-    console.log(`Server unificato presence attivo sulla porta ${PORT}`);
-    console.log(`Cartella sorgente post impostata su: ${postsDir}`);
+    console.log(`Unified presence server active on port ${PORT}`);
+    console.log(`Post source folder set to: ${postsDir}`);
   });
 }
