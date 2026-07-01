@@ -11,7 +11,12 @@ process.env.ADMIN_PASSWORD = 'pw';
 process.env.ME = 'https://example.com';
 process.env.POSTS_DIR = path.join(os.tmpdir(), 'presence-selftest-posts');
 
-const { signToken, verifyToken, pkceS256, slugify } = await import('./server.js');
+const { signToken, verifyToken, pkceS256, slugify, contextLine } = await import('./server.js');
+
+// contextLine: tipi di post IndieWeb
+assert(contextLine({ bookmark: 'https://x.com' }) === '🔖 Bookmark: [https://x.com](https://x.com)', 'bookmark');
+assert(contextLine({ reply: 'https://x.com', rsvp: 'yes' }).includes('RSVP **yes**'), 'rsvp');
+assert(contextLine({}) === '', 'nota normale = nessun prefisso');
 
 const now = Math.floor(Date.now() / 1000);
 

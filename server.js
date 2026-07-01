@@ -554,9 +554,18 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     <h1>Nuovo post</h1>
     ${syndNote}
     <form class="post-form" method="POST" action="/admin/posts" enctype="multipart/form-data">
+        <select name="ptype">
+            <option value="note">Nota</option>
+            <option value="article">Articolo</option>
+            <option value="bookmark">Bookmark</option>
+            <option value="reply">Risposta</option>
+            <option value="like">Like</option>
+            <option value="repost">Repost</option>
+        </select>
+        <input name="link" placeholder="URL (per bookmark / reply / like / repost)">
         <input name="title" placeholder="Titolo">
         <input name="tags" placeholder="tag separati da virgola (es: web, indieweb)">
-        <textarea name="content" rows="10" placeholder="Contenuto (Markdown)" required></textarea>
+        <textarea name="content" rows="10" placeholder="Contenuto (Markdown)"></textarea>
         <input type="file" name="photo" accept="image/*" multiple>
         <button type="submit">Pubblica</button>
     </form>
@@ -718,9 +727,12 @@ async function syndicateToMastodon({ title, body, url }) {
 app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (req, res) => {
   const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
   const photos = (req.files || []).map(mediaUrlFor);
+  const link = (req.body.link || '').trim();
+  const prefix = link ? contextLine({ [req.body.ptype]: link }) : '';
+  const body = [prefix, req.body.content].filter(Boolean).join('\n\n');
   try {
-    const { url } = writePost({ title: req.body.title, body: req.body.content, tags, photos });
-    await syndicateToMastodon({ title: req.body.title, body: req.body.content || '', url });
+    const { url } = writePost({ title: req.body.title, body, tags, photos });
+    await syndicateToMastodon({ title: req.body.title, body, url });
     res.redirect('/admin');
   } catch (e) {
     res.status(e.status || 500).send(e.message);
@@ -925,25 +937,39 @@ function photoUrls(photo) {
     .filter(Boolean);
 }
 
+// Rende i tipi di post IndieWeb (bookmark, like, reply, repost, RSVP) come riga
+// Markdown da mettere in cima al post. Ritorna '' per una nota/articolo normale.
+export function contextLine({ bookmark, like, repost, reply, rsvp } = {}) {
+  const l = u => `[${u}](${u})`;
+  if (bookmark) return `🔖 Bookmark: ${l(bookmark)}`;
+  if (like) return `👍 Like: ${l(like)}`;
+  if (repost) return `🔁 Repost: ${l(repost)}`;
+  if (reply) return rsvp ? `📅 RSVP **${rsvp}**: ${l(reply)}` : `↩ In risposta a ${l(reply)}`;
+  return '';
+}
+
 // --- Micropub: normalizza create da form-encoded o JSON (mf2) ---
 function parseMicropubCreate(body) {
-  if (body.type) {
-    const p = body.properties || {};
-    const first = v => (Array.isArray(v) ? v[0] : v);
-    let content = first(p.content);
-    if (content && typeof content === 'object') content = content.html || content.value || '';
-    return {
-      title: first(p.name) || '',
-      body: String(content || ''),
-      tags: [].concat(p.category || []).filter(Boolean),
-      photos: photoUrls(p.photo)
-    };
-  }
+  const p = body.type ? (body.properties || {}) : body; // JSON mf2 vs form-encoded
+  const first = v => (Array.isArray(v) ? v[0] : v);
+
+  let content = first(p.content);
+  if (content && typeof content === 'object') content = content.html || content.value || '';
+  content = String(content || '');
+
+  const prefix = contextLine({
+    bookmark: first(p['bookmark-of']),
+    like: first(p['like-of']),
+    repost: first(p['repost-of']),
+    reply: first(p['in-reply-to']),
+    rsvp: first(p.rsvp)
+  });
+
   return {
-    title: body.name || '',
-    body: String(body.content || ''),
-    tags: [].concat(body.category || body['category[]'] || []).filter(Boolean),
-    photos: photoUrls(body.photo || body['photo[]'])
+    title: first(p.name) || '',
+    body: [prefix, content].filter(Boolean).join('\n\n'),
+    tags: [].concat(p.category || p['category[]'] || []).filter(Boolean),
+    photos: photoUrls(p.photo || p['photo[]'])
   };
 }
 
