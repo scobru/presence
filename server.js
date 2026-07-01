@@ -390,7 +390,7 @@ app.get('/', (req, res) => {
     <div class="container">
         <header class="main-header">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h1>${escapeHtml(SITE_NAME)}</h1>
+                <h1 style="display: flex; align-items: center; gap: 10px;"><img src="/favicon.png" alt="" width="32" height="32" style="border-radius: 6px;">${escapeHtml(SITE_NAME)}</h1>
             </div>
             ${SITE_DESCRIPTION ? `<p style="color: #888888; font-size: 0.85rem; margin: 0;">${escapeHtml(SITE_DESCRIPTION)}</p>` : ''}
         </header>
@@ -402,7 +402,7 @@ app.get('/', (req, res) => {
         </main>
 
         <footer>
-            // running stateful on node.js
+            <a href="https://github.com/scobru/presence" target="_blank" rel="noopener">github.com/scobru/presence</a>
         </footer>
     </div>
 </body>
