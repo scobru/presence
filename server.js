@@ -18,15 +18,14 @@ const mediaDir = path.join(postsDir, 'media');
 const SITE_URL = (process.env.ME || 'https://presence.scobrudot.dev').replace(/\/+$/, '');
 const SECRET = process.env.SECRET || process.env.INDIEAUTH_SECRET || '';
 const AUTH_PASSWORD = process.env.ADMIN_PASSWORD || '';
-<<<<<<< HEAD
 const AUTH_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
-const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 giorni
+const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days
 
-// Nome e descrizione del sito (mostrati in homepage). Configurabili via env.
+// Site name and description (shown on homepage). Configurable via env.
 const SITE_NAME = process.env.SITE_NAME || 'presence';
 const SITE_DESCRIPTION = process.env.SITE_DESCRIPTION || '';
 
-// Light mode: attivato quando <html data-theme="light">. Il tema iniziale segue
+// Light mode: enabled when <html data-theme="light">. Il tema iniziale segue
 // l'OS (o la scelta salvata) via THEME_UI; il bottone 🌓 lo commuta e lo persiste.
 const LIGHT_CSS = `
 html[data-theme="light"] body { background-color: #fbfbfb !important; color: #1f1f1f !important; }
@@ -75,7 +74,7 @@ const POST_TYPES = {
 // Assicura che le cartelle esistano
 fs.mkdirSync(mediaDir, { recursive: true });
 
-// Serve i media caricati come file statici
+// Serve uploaded media as static files
 app.use('/media', express.static(mediaDir));
 
 // Upload media su disco: media/{yyyy}/{mm}/{timestamp}-{slug}.{ext}
@@ -101,21 +100,6 @@ function mediaUrlFor(file) {
   const rel = path.relative(mediaDir, file.path).split(path.sep).join('/');
   return `${SITE_URL}/media/${rel}`;
 }
-=======
-const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days
-
-// Ensure the posts folder exists
-if (!fs.existsSync(postsDir)) {
-  fs.mkdirSync(postsDir, { recursive: true });
-}
-
-// Serve uploaded media as static files
-app.use('/media', express.static(path.join(postsDir, 'media')));
-// Serve favicon
-app.get('/favicon.ico', (req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
-app.get('/favicon.png', (req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
-
 
 // Helper to escape HTML (titles, tags, slugs come from user content via Micropub)
 function escapeHtml(str) {
@@ -400,13 +384,7 @@ app.get('/', (req, res) => {
                 <h1>${escapeHtml(SITE_NAME)}</h1>
                 <div class="status"><span class="status-dot"></span>VPS Online</div>
             </div>
-<<<<<<< HEAD
             ${SITE_DESCRIPTION ? `<p style="color: #888888; font-size: 0.85rem; margin: 0;">${escapeHtml(SITE_DESCRIPTION)}</p>` : ''}
-=======
-            <p style="color: #888888; font-size: 0.85rem; margin: 0;">
-                Personal website of <a href="https://scobru.it" style="color: #ffffff;">scobru.it</a>.
-            </p>
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
         </header>
 
         ${filterBar}
@@ -650,18 +628,12 @@ app.get('/admin', requireAdminAuth, (req, res) => {
       <td>${escapeHtml(String(post.date).slice(0, 10))}</td>
       <td class="tag">${post.tags.map(t => '#' + escapeHtml(t)).join(' ')}</td>
       <td>
-<<<<<<< HEAD
         <div class="actions">
           <a class="btn" href="/admin/posts/${encodeURIComponent(post.filename)}/edit">Modifica</a>
-          <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Cancellare questo post?');">
-            <button class="danger" type="submit">Cancella</button>
+          <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Delete this post?');">
+            <button class="danger" type="submit">Delete</button>
           </form>
         </div>
-=======
-        <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Delete this post?');">
-          <button type="submit">Delete</button>
-        </form>
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
       </td>
     </tr>`).join('\n');
 
@@ -679,53 +651,39 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     <style>${ADMIN_STYLE}</style>
 </head>
 <body>
-<<<<<<< HEAD
     ${THEME_UI}
-    <h1>Nuovo post</h1>
+    <h1>New post</h1>
     ${syndNote}
     <form class="post-form" method="POST" action="/admin/posts" enctype="multipart/form-data">
         <select name="ptype">${typeOptions('note')}</select>
         <input name="link" placeholder="URL (per bookmark / reply / like / repost / listen / check-in)">
-        <input name="title" placeholder="Titolo">
-        <input name="tags" placeholder="tag separati da virgola (es: web, indieweb)">
-        <textarea name="content" rows="10" placeholder="Contenuto (Markdown)"></textarea>
-        <input type="file" name="photo" accept="image/*" multiple>
-        <button type="submit">Pubblica</button>
-=======
-    <h1>New post</h1>
-    <form class="new-post" method="POST" action="/admin/posts">
-        <input name="title" placeholder="Title" required>
+        <input name="title" placeholder="Title">
         <input name="tags" placeholder="comma-separated tags (e.g., web, indieweb)">
-        <textarea name="content" rows="10" placeholder="Content (Markdown)" required></textarea>
+        <textarea name="content" rows="10" placeholder="Content (Markdown)"></textarea>
+        <input type="file" name="photo" accept="image/*" multiple>
         <button type="submit">Publish</button>
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
     </form>
 
     <h1>Published posts (${posts.length})</h1>
     <table>
-<<<<<<< HEAD
-        <tr><th>Titolo</th><th>Data</th><th>Tag</th><th></th></tr>
-        ${rowsHtml || '<tr><td colspan="4">Nessun post.</td></tr>'}
-=======
-        <tr><th>Title</th><th>Date</th><th></th></tr>
-        ${rowsHtml || '<tr><td colspan="3">No posts.</td></tr>'}
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
+        <tr><th>Title</th><th>Date</th><th>Tag</th><th></th></tr>
+        ${rowsHtml || '<tr><td colspan="4">No posts.</td></tr>'}
     </table>
 </body>
 </html>`);
 });
 
-<<<<<<< HEAD
 // Pagina di modifica di un post esistente
 app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
   const filename = path.basename(req.params.filename);
   const post = getSortedPosts().find(p => p.filename === filename);
-  if (!post) return res.status(404).send('Post non trovato.');
+  if (!post) return res.status(404).send('Post not found.');
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
+    <link rel="icon" type="image/png" href="/favicon.png">
     <meta charset="UTF-8">
     <title>Modifica — presence</title>
     <style>${ADMIN_STYLE}</style>
@@ -735,7 +693,7 @@ app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
     <p><a href="/admin">← Torna all'admin</a></p>
     <h1>Modifica post</h1>
     <form class="post-form" method="POST" action="/admin/posts/${encodeURIComponent(filename)}">
-        <input name="title" placeholder="Titolo" value="${escapeHtml(post.title)}">
+        <input name="title" placeholder="Title" value="${escapeHtml(post.title)}">
         <input name="tags" placeholder="tag separati da virgola" value="${escapeHtml(post.tags.join(', '))}">
         <textarea name="content" rows="16" required>${escapeHtml(post.content)}</textarea>
         <button type="submit">Salva</button>
@@ -744,10 +702,7 @@ app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
 </html>`);
 });
 
-// Genera uno slug sicuro per il filesystem da un titolo
-=======
 // Generate a filesystem-safe slug from a title
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
 export function slugify(str) {
   return String(str)
     .toLowerCase()
@@ -757,7 +712,6 @@ export function slugify(str) {
     .slice(0, 60);
 }
 
-<<<<<<< HEAD
 // Costruisce il blocco frontmatter YAML (parser semplice: niente virgolette nei valori)
 function buildFrontmatter({ title, date, tags = [], type = 'note' }) {
   const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
@@ -777,12 +731,6 @@ function appendPhotos(body, photos = []) {
 
 // Scrive un nuovo post. Ritorna { slug, url } o lancia Error con .status.
 export function writePost({ title, body, tags = [], photos = [], type = 'note' }) {
-=======
-// Writes a post to disk as a Markdown file with frontmatter.
-// Used by both the /admin UI and the Micropub endpoint.
-// Returns { slug, url } or throws an Error with .status.
-export function writePost({ title, body, tags = [] }) {
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
   title = (title || '').trim();
   body = appendPhotos((body || '').trim(), photos);
   tags = tags.map(t => String(t).trim()).filter(Boolean);
@@ -806,7 +754,6 @@ export function writePost({ title, body, tags = [] }) {
     throw e;
   }
 
-<<<<<<< HEAD
   fs.writeFileSync(filePath, buildFrontmatter({ title, date: now.toISOString(), tags, type }) + body + '\n');
   return { slug, url: `${SITE_URL}/posts/${slug}` };
 }
@@ -831,21 +778,7 @@ export function updatePost(filename, { title, body, tags }) {
   return { slug: existing.slug, url: `${SITE_URL}/posts/${existing.slug}` };
 }
 
-// Cancella un post dato il suo URL pubblico (es. https://site/posts/slug)
-=======
-  // Remove double quotes: the frontmatter parser in getSortedPosts is simple
-  const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
-  const tagsYaml = tags.length
-    ? 'tags:\n' + tags.map(t => `  - "${t.replace(/"/g, '')}"`).join('\n') + '\n'
-    : '';
-  const frontmatter = `---\n${titleYaml}date: ${now.toISOString()}\n${tagsYaml}---\n`;
-
-  fs.writeFileSync(filePath, frontmatter + body + '\n');
-  return { slug, url: `${SITE_URL}/posts/${slug}` };
-}
-
-// Delete un post dato il suo URL pubblico (es. https://site/posts/slug)
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
+// Deletes a post given its public URL (e.g. https://site/posts/slug)
 function deletePostByUrl(url) {
   const post = findPostByUrl(url);
   if (!post) return false;
@@ -1059,7 +992,6 @@ function timingEqual(a, b) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
-<<<<<<< HEAD
 // Hash della password: scrypt salato, formato "scrypt:<salt_hex>:<hash_hex>".
 // Generato dalla pagina di setup /auth/new-password e messo in ADMIN_PASSWORD_HASH.
 function hashPassword(plain) {
@@ -1083,14 +1015,9 @@ function checkAdminPassword(candidate) {
   return timingEqual(candidate || '', AUTH_PASSWORD);
 }
 
-// Codici di autorizzazione: vita breve (10 min), uso singolo, in memoria.
-// ponytail: Map in memoria — se il container riavvia durante il login, rifai l'accesso.
-// Per single-user va bene; se serve multi-istanza, sposta su store condiviso.
-=======
 // Authorization codes: short-lived (10 min), single-use, in memory.
 // ponytail: In-memory Map — if the container restarts during login, log in again.
 // Fine for single-user; if multi-instance is needed, move to a shared store.
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
 const authCodes = new Map();
 
 function hasScope(token, scope) {
@@ -1108,13 +1035,8 @@ function bearer(req) {
 }
 
 function requireConfigured(req, res, next) {
-<<<<<<< HEAD
   if (!SECRET || (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH)) {
     return res.status(503).json({ error: 'service_unavailable', error_description: 'Imposta SECRET e ADMIN_PASSWORD (o ADMIN_PASSWORD_HASH) per abilitare IndieAuth/Micropub.' });
-=======
-  if (!SECRET || !AUTH_PASSWORD) {
-    return res.status(503).json({ error: 'service_unavailable', error_description: 'Set SECRET and ADMIN_PASSWORD to enable IndieAuth/Micropub.' });
->>>>>>> 5ff3037 (feat: translate app to English and add favicon)
   }
   next();
 }
@@ -1123,7 +1045,8 @@ function requireConfigured(req, res, next) {
 // Volutamente fuori da requireConfigured: serve anche prima che SECRET/ADMIN_PASSWORD siano impostati.
 function renderNewPasswordPage({ error, hash } = {}) {
   return `<!DOCTYPE html>
-<html lang="it"><head><meta charset="UTF-8"><title>Genera hash password — presence</title>
+<html lang="en"><head>
+    <link rel="icon" type="image/png" href="/favicon.png"><meta charset="UTF-8"><title>Generate hash password — presence</title>
 <style>
   body { background:#050505; color:#d8d8d8; font-family:ui-monospace,monospace; max-width:480px; margin:60px auto; padding:0 20px; }
   .box { border:1px solid #222; background:#0a0a0a; padding:25px; border-radius:6px; }
@@ -1135,13 +1058,13 @@ function renderNewPasswordPage({ error, hash } = {}) {
   input[type=password] { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #333; padding:10px; margin:12px 0; border-radius:4px; }
   button { background:#06c; color:#fff; border:0; padding:10px 20px; border-radius:4px; cursor:pointer; width:100%; font-size:1rem; }
 </style></head><body><div class="box">
-  <h1>Genera hash password</h1>
+  <h1>Generate hash password</h1>
   <p class="hint">Inserisci la password che vuoi usare per <code>/admin</code> e IndieAuth. Il server genera un hash da incollare in <code>ADMIN_PASSWORD_HASH</code> nel <code>.env</code> — la password in chiaro non viene salvata da nessuna parte.</p>
   ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
-  ${hash ? `<p>Hash generato, copialo in <code>ADMIN_PASSWORD_HASH</code>:</p><pre>${escapeHtml(hash)}</pre><p class="hint">Poi rimuovi <code>ADMIN_PASSWORD</code> (o lasciala vuota) e riavvia il server.</p>` : ''}
+  ${hash ? `<p>Hash generated, copy it to <code>ADMIN_PASSWORD_HASH</code>:</p><pre>${escapeHtml(hash)}</pre><p class="hint">Then remove <code>ADMIN_PASSWORD</code> (or leave it empty) and restart the server.</p>` : ''}
   <form method="POST" action="/auth/new-password">
-    <input type="password" name="password" placeholder="Nuova password" autofocus required minlength="8">
-    <button type="submit">Genera hash</button>
+    <input type="password" name="password" placeholder="New password" autofocus required minlength="8">
+    <button type="submit">Generate hash</button>
   </form>
 </div></body></html>`;
 }
@@ -1154,7 +1077,7 @@ app.get('/auth/new-password', (req, res) => {
 app.post('/auth/new-password', express.urlencoded({ extended: false }), (req, res) => {
   const password = req.body?.password || '';
   res.setHeader('Content-Type', 'text/html');
-  if (!password) return res.status(400).send(renderNewPasswordPage({ error: 'Inserisci una password.' }));
+  if (!password) return res.status(400).send(renderNewPasswordPage({ error: 'Enter a password.' }));
   res.send(renderNewPasswordPage({ hash: hashPassword(password) }));
 });
 
@@ -1267,7 +1190,7 @@ function photoUrls(photo) {
 
 // Renders an IndieWeb post type as a Markdown line at the top of the post.
 // - types with URL: "emoji verb [link](link)" (only if link is present)
-// - "lead" types without URL (food/drink): "emoji verb" as heading
+// - lead types without URL (food/drink): "emoji verb" as header
 // - note/article/photo: no prefix
 export function contextLine(type, link) {
   const t = POST_TYPES[type];
@@ -1286,7 +1209,7 @@ function parseMicropubCreate(body) {
   if (content && typeof content === 'object') content = content.html || content.value || '';
   content = String(content || '');
 
-  // Deduce il tipo dalla proprietà mf2 presente (bookmark-of, like-of, ...)
+  // Infers the type from the present mf2 property (bookmark-of, like-of, ...)
   let type = 'note';
   let link = '';
   for (const [name, t] of Object.entries(POST_TYPES)) {
@@ -1408,7 +1331,6 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       return ok ? res.status(204).end() : res.status(404).json({ error: 'not_found' });
     }
 
-    // update / undelete not implemented: posts are Markdown files, they are edited from /admin
     return res.status(501).json({ error: 'not_implemented', error_description: `Action '${action}' not supported.` });
   } catch (e) {
     return res.status(e.status || 500).json({ error: 'invalid_request', error_description: e.message });
