@@ -670,6 +670,7 @@ app.get('/admin', requireAdminAuth, (req, res) => {
         <input name="tags" placeholder="comma-separated tags (e.g., web, indieweb)">
         <textarea name="content" rows="10" placeholder="Content (Markdown)"></textarea>
         <input type="file" name="photo" accept="image/*" multiple>
+        ${(MASTODON_URL && MASTODON_TOKEN) ? '<label style="display:flex;align-items:center;gap:8px;color:#aaa;"><input type="checkbox" name="syndicate" value="1" checked style="width:auto;"> Post to Mastodon</label>' : ''}
         <button type="submit">Publish</button>
     </form>
 
@@ -979,8 +980,10 @@ app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (re
   const body = [contextLine(type, link), content].filter(Boolean).join('\n\n');
   try {
     const { url, filename } = writePost({ title: req.body.title, body, tags, photos, type });
-    const synd = await syndicateToMastodon({ title: req.body.title, body, content, url, photoPaths, type, link });
-    if (synd?.id) setPostMastodonId(filename, synd.id);
+    if (req.body.syndicate) {
+      const synd = await syndicateToMastodon({ title: req.body.title, body, content, url, photoPaths, type, link });
+      if (synd?.id) setPostMastodonId(filename, synd.id);
+    }
     res.redirect('/admin');
   } catch (e) {
     res.status(e.status || 500).send(e.message);
