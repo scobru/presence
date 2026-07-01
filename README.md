@@ -27,7 +27,10 @@ Pensato per il deploy su una VPS con CapRover (o qualsiasi host Docker).
 - **Pannello admin** (`/admin`, Basic Auth) — composer con selettore tipo,
   upload foto, creazione / modifica / cancellazione post, filtro visivo.
 - **Syndication Mastodon** — crosspost automatico (best-effort) di ogni nuovo
-  post, con upload delle immagini come allegati (`/api/v2/media`).
+  post, con upload delle immagini come allegati (`/api/v2/media`). Risposta,
+  RSVP, Repost e Like con link a un post Mastodon risolvibile diventano azioni
+  AP native (reply in thread, boost, favourite) invece di un nuovo status col
+  link nel testo.
 - **Homepage** — lista post con badge per tipo, **filtro per tipo** a tendina,
   nome/descrizione del sito configurabili da env.
 - **Tema chiaro/scuro** — bottone 🌓 su ogni pagina, scelta salvata in
@@ -60,7 +63,7 @@ npm start              # http://localhost:3000
 | `POSTS_DIR` | no | Cartella dei post (default `./posts`) |
 | `PORT` | no | Porta (default `3000`) |
 | `MASTODON_URL` | no | Istanza Mastodon per il crosspost |
-| `MASTODON_ACCESS_TOKEN` | no | Token Mastodon con permesso `write:statuses` |
+| `MASTODON_ACCESS_TOKEN` | no | Token Mastodon con permessi `write:statuses`, `write:favourites`, `write:reblogs` e `read:search` (per risolvere reply/repost/like in azioni AP native) |
 | `MASTODON_USER` | no | Handle mostrato in admin |
 
 La syndication Mastodon si attiva solo se `MASTODON_URL` **e**
