@@ -1,144 +1,143 @@
 # presence
 
-Blog personale IndieWeb minimale: un singolo file `server.js` (Express, ESM) che
-implementa **nativamente** IndieAuth, Micropub e un pannello admin, senza
-Indiekit e senza database. I post sono file Markdown con frontmatter su disco.
+Minimal personal IndieWeb blog: a single `server.js` file (Express, ESM) that
+implements IndieAuth, Micropub, and an admin panel natively, with no
+database. Posts are Markdown files with frontmatter on disk.
 
-Pensato per il deploy su una VPS con CapRover (o qualsiasi host Docker).
+Built for deployment on a VPS with CapRover (or any Docker host).
 
-## Caratteristiche
+## Features
 
-- **Blog Markdown** — i post sono file `.md` con frontmatter (`title`, `date`,
-  `type`, `tags`), letti e ordinati da disco a ogni richiesta. Nessun DB.
-- **IndieAuth nativo** — authorization endpoint (`/auth`) + token endpoint
-  (`/token`) self-hosted. Login con la tua password, access token JWT firmati
-  HMAC-SHA256 (stateless), PKCE `S256` obbligatoria, codici monouso.
-- **Micropub nativo** (`/micropub`, [spec W3C](https://www.w3.org/TR/micropub/)) —
-  compatibile con i client esterni (Micropublish, Quill, micro.blog):
-  - `create` (form-encoded e JSON mf2), `update` (replace name/content/category),
+- **Markdown blog** — posts are `.md` files with frontmatter (`title`, `date`,
+  `type`, `tags`), read and sorted from disk on every request. No DB.
+- **Native IndieAuth** — self-hosted authorization endpoint (`/auth`) + token
+  endpoint (`/token`). Login with your password, HMAC-SHA256 signed JWT
+  access tokens (stateless), mandatory PKCE `S256`, single-use codes.
+- **Native Micropub** (`/micropub`, [W3C spec](https://www.w3.org/TR/micropub/)) —
+  compatible with external clients (Micropublish, Quill, micro.blog):
+  - `create` (form-encoded and JSON mf2), `update` (replace name/content/category),
     `delete`
-  - query `q=config`, `q=source`, `q=syndicate-to`
-- **Tipi di post IndieWeb** — Nota, Articolo, Bookmark, Risposta, RSVP, Repost,
-  Like, Check-in, Foto, Listen, Food, Drink. Le proprietà di contesto
-  (`bookmark-of`, `like-of`, `in-reply-to`, ...) sono rese come riga Markdown in
-  cima al post, con emoji e frase naturale.
-- **Media** — endpoint `/media` (upload multipart via Micropub) e upload foto
-  diretto dal pannello admin. Immagini Markdown (`![](url)`) renderizzate.
-- **Pannello admin** (`/admin`, Basic Auth) — composer con selettore tipo,
-  upload foto, creazione / modifica / cancellazione post, filtro visivo.
-- **Syndication Mastodon** — crosspost automatico (best-effort) di ogni nuovo
-  post, con upload delle immagini come allegati (`/api/v2/media`). Risposta,
-  RSVP, Repost e Like con link a un post Mastodon risolvibile diventano azioni
-  AP native (reply in thread, boost, favourite) invece di un nuovo status col
-  link nel testo.
-- **Homepage** — lista post con badge per tipo, **filtro per tipo** a tendina,
-  nome/descrizione del sito configurabili da env.
-- **Tema chiaro/scuro** — bottone 🌓 su ogni pagina, scelta salvata in
-  `localStorage`, tema iniziale che segue l'impostazione dell'OS.
-- **Sicurezza** — escaping HTML dei contenuti utente, guardie contro path
-  traversal, confronti timing-safe su password e firme, self-test inclusi.
+  - queries `q=config`, `q=source`, `q=syndicate-to`
+- **IndieWeb post types** — Note, Article, Bookmark, Reply, RSVP, Repost,
+  Like, Check-in, Photo, Listen, Food, Drink. Context properties
+  (`bookmark-of`, `like-of`, `in-reply-to`, ...) are rendered as a Markdown
+  line at the top of the post, with emoji and natural phrasing.
+- **Media** — `/media` endpoint (multipart upload via Micropub) and direct
+  photo upload from the admin panel. Markdown images (`![](url)`) rendered.
+- **Admin panel** (`/admin`, Basic Auth) — composer with type selector, photo
+  upload, post create/edit/delete, visual filter.
+- **Mastodon syndication** — automatic (best-effort) crosspost of every new
+  post, with images uploaded as attachments (`/api/v2/media`). Reply, RSVP,
+  Repost, and Like with a link to a resolvable Mastodon post become native AP
+  actions (threaded reply, boost, favourite) instead of a new status with the
+  link in the text.
+- **Homepage** — post list with type badges, **type filter** dropdown,
+  site name/description configurable via env.
+- **Light/dark theme** — 🌓 button on every page, choice saved in
+  `localStorage`, initial theme follows the OS setting.
+- **Security** — HTML escaping of user content, path traversal guards,
+  timing-safe comparisons on passwords and signatures, self-tests included.
 
-## Requisiti
+## Requirements
 
-- Node.js 20+ (usa `fetch`, `FormData`, `Blob` nativi)
+- Node.js 20+ (uses native `fetch`, `FormData`, `Blob`)
 
-## Avvio locale
+## Local setup
 
 ```bash
 npm install
-cp .env.example .env   # poi modifica i valori
+cp .env.example .env   # then edit the values
 npm start              # http://localhost:3000
 ```
 
-## Variabili d'ambiente
+## Environment variables
 
-| Variabile | Obbligatoria | Descrizione |
-|-----------|:---:|-------------|
-| `ME` | consigliata | URL pubblico del sito (valore `me` di IndieAuth), senza slash finale |
-| `SECRET` | per IndieAuth | Segreto per firmare gli access token. Genera con `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `ADMIN_PASSWORD` | per admin/auth | Password unica per `/admin` (Basic Auth) e per autorizzare i client Micropub. Senza, `/admin` e `/micropub` restano disabilitati (503) |
-| `ADMIN_USER` | no | Username admin (default `admin`) |
-| `SITE_NAME` | no | Nome del sito mostrato in homepage (default `presence`) |
-| `SITE_DESCRIPTION` | no | Sottotitolo in homepage (default vuoto) |
-| `POSTS_DIR` | no | Cartella dei post (default `./posts`) |
-| `PORT` | no | Porta (default `3000`) |
-| `MASTODON_URL` | no | Istanza Mastodon per il crosspost |
-| `MASTODON_ACCESS_TOKEN` | no | Token Mastodon con permessi `write:statuses`, `write:favourites`, `write:reblogs` e `read:search` (per risolvere reply/repost/like in azioni AP native) |
-| `MASTODON_USER` | no | Handle mostrato in admin |
+| Variable | Required | Description |
+|----------|:---:|-------------|
+| `ME` | recommended | Public site URL (IndieAuth `me` value), no trailing slash |
+| `SECRET` | for IndieAuth | Secret used to sign access tokens. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `ADMIN_PASSWORD` | for admin/auth | Single password for `/admin` (Basic Auth) and for authorizing Micropub clients. Without it, `/admin` and `/micropub` stay disabled (503) |
+| `ADMIN_USER` | no | Admin username (default `admin`) |
+| `SITE_NAME` | no | Site name shown on the homepage (default `presence`) |
+| `SITE_DESCRIPTION` | no | Homepage subtitle (default empty) |
+| `POSTS_DIR` | no | Posts folder (default `./posts`) |
+| `PORT` | no | Port (default `3000`) |
+| `MASTODON_URL` | no | Mastodon instance for crossposting |
+| `MASTODON_ACCESS_TOKEN` | no | Mastodon token with `write:statuses`, `write:favourites`, `write:reblogs`, and `read:search` permissions (to resolve reply/repost/like into native AP actions) |
+| `MASTODON_USER` | no | Handle shown in admin |
 
-La syndication Mastodon si attiva solo se `MASTODON_URL` **e**
-`MASTODON_ACCESS_TOKEN` sono entrambe presenti.
+Mastodon syndication is enabled only if both `MASTODON_URL` **and**
+`MASTODON_ACCESS_TOKEN` are set.
 
-## Endpoint
+## Endpoints
 
-| Rotta | Metodo | Descrizione |
+| Route | Method | Description |
 |-------|--------|-------------|
-| `/` | GET | Homepage (supporta `?type=<tipo>` per filtrare) |
-| `/posts/:slug` | GET | Pagina singolo post |
-| `/admin` | GET | Pannello admin (Basic Auth) |
-| `/admin/posts` | POST | Crea post (form) |
-| `/admin/posts/:file/edit` | GET | Form di modifica |
-| `/admin/posts/:file` | POST | Salva modifiche |
-| `/admin/posts/:file/delete` | POST | Cancella |
+| `/` | GET | Homepage (supports `?type=<type>` filter) |
+| `/posts/:slug` | GET | Single post page |
+| `/admin` | GET | Admin panel (Basic Auth) |
+| `/admin/posts` | POST | Create post (form) |
+| `/admin/posts/:file/edit` | GET | Edit form |
+| `/admin/posts/:file` | POST | Save changes |
+| `/admin/posts/:file/delete` | POST | Delete |
 | `/auth` | GET/POST | IndieAuth authorization endpoint |
 | `/token` | GET/POST | IndieAuth token endpoint |
 | `/micropub` | GET/POST | Micropub (create/update/delete, query) |
-| `/media` | POST | Upload media (Micropub) |
+| `/media` | POST | Media upload (Micropub) |
 
-## Pubblicare i post
+## Publishing posts
 
-**Dal pannello admin:** vai su `/admin`, scegli il tipo, scrivi, allega foto,
-Pubblica.
+**From the admin panel:** go to `/admin`, pick the type, write, attach
+photos, Publish.
 
-**Da un client Micropub esterno** (es. [Micropublish](https://micropublish.net)):
-fai login con l'URL del tuo sito e la tua `ADMIN_PASSWORD`. Il client scopre gli
-endpoint dai `<link rel>` nelle pagine.
+**From an external Micropub client** (e.g. [Micropublish](https://micropublish.net)):
+log in with your site URL and your `ADMIN_PASSWORD`. The client discovers the
+endpoints from the `<link rel>` tags on the pages.
 
-## Formato dei post
+## Post format
 
 ```markdown
 ---
-title: "Titolo del post"
+title: "Post title"
 type: bookmark
 date: 2026-07-01T10:00:00.000Z
 tags:
   - web
   - indieweb
 ---
-🔖 Segnalibro: [https://esempio.com](https://esempio.com)
+🔖 Bookmark: [https://example.com](https://example.com)
 
-Contenuto del post in Markdown.
+Post content in Markdown.
 ```
 
-Il nome file è `YYYY-MM-DD-slug.md`; lo slug deriva dal titolo (o dal timestamp
-per le note senza titolo). Modificare un post ne mantiene data e slug (URL
-stabile).
+The filename is `YYYY-MM-DD-slug.md`; the slug comes from the title (or the
+timestamp for untitled notes). Editing a post keeps its date and slug
+(stable URL).
 
 ## Deploy (CapRover)
 
-Il repo include `Dockerfile`, `captain-definition` e `docker-compose.yml`.
-Imposta le variabili d'ambiente nell'App Config di CapRover (almeno `ME`,
-`SECRET`, `ADMIN_PASSWORD`) e fai il deploy. La cartella `posts/` va montata su
-un volume persistente.
+The repo includes `Dockerfile`, `captain-definition`, and `docker-compose.yml`.
+Set the environment variables in CapRover's App Config (at least `ME`,
+`SECRET`, `ADMIN_PASSWORD`) and deploy. The `posts/` folder should be mounted
+on a persistent volume.
 
-## Test
+## Tests
 
 ```bash
 npm test
 ```
 
-`selftest.mjs` verifica la parte security-critica senza avviare il server:
-roundtrip/manomissione/scadenza/forgiatura dei token, il vettore PKCE ufficiale
-(RFC 7636), `slugify` e `contextLine`.
+`selftest.mjs` checks the security-critical parts without starting the
+server: token roundtrip/tampering/expiry/forgery, the official PKCE vector
+(RFC 7636), `slugify`, and `contextLine`.
 
-## Non implementato (per scelta)
+## Not implemented (by choice)
 
-- `undelete` Micropub
-- ActivityPub / federazione (esiste solo il crosspost via API Mastodon)
-- Rendering ricco dedicato per Check-in (mappa) / Listen (embed)
-- L'`update` che sostituisce il contenuto rimuove le foto (semantica mf2
-  `replace`)
+- Micropub `undelete`
+- Full ActivityPub federation (only the Mastodon API crosspost exists)
+- Dedicated rich rendering for Check-in (map) / Listen (embed)
+- `update` replacing content strips photos (mf2 `replace` semantics)
 
-## Licenza
+## License
 
 MIT — Francesco Bruno (scobru)
