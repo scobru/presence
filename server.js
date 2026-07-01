@@ -79,6 +79,7 @@ app.use('/media', express.static(mediaDir));
 
 // Serve favicon
 app.get('/favicon.png', (req, res) => {
+  res.type('image/jpeg'); // favicon.png is actually JPEG-encoded
   res.sendFile(path.join(__dirname, 'favicon.png'));
 });
 
