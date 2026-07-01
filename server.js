@@ -33,7 +33,7 @@ html[data-theme="light"] .post-card, html[data-theme="light"] .box { background-
 html[data-theme="light"] h1, html[data-theme="light"] h2 a, html[data-theme="light"] .post-card h2 a, html[data-theme="light"] .content h2, html[data-theme="light"] .content h3 { color: #111111 !important; }
 html[data-theme="light"] a { color: #0066cc !important; }
 html[data-theme="light"] .meta, html[data-theme="light"] .tag, html[data-theme="light"] footer { color: #777777 !important; }
-html[data-theme="light"] .content { color: #333333 !important; }
+html[data-theme="light"] .content, html[data-theme="light"] .post-preview { color: #333333 !important; }
 html[data-theme="light"] .content code { background: #f0f0f0 !important; color: #c7254e !important; border-color: #e0e0e0 !important; }
 html[data-theme="light"] .content pre { background: #f6f6f6 !important; border-color: #e5e5e5 !important; }
 html[data-theme="light"] input, html[data-theme="light"] textarea, html[data-theme="light"] select { background-color: #ffffff !important; color: #222222 !important; border-color: #cccccc !important; }
@@ -76,6 +76,11 @@ fs.mkdirSync(mediaDir, { recursive: true });
 
 // Serve uploaded media as static files
 app.use('/media', express.static(mediaDir));
+
+// Serve favicon
+app.get('/favicon.png', (req, res) => {
+  res.sendFile(path.join(__dirname, 'favicon.png'));
+});
 
 // Upload media su disco: media/{yyyy}/{mm}/{timestamp}-{slug}.{ext}
 const mediaUpload = multer({
@@ -254,6 +259,7 @@ app.get('/', (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(SITE_NAME)}</title>
     <link rel="authorization_endpoint" href="/auth">
+    
     <link rel="token_endpoint" href="/token">
     <link rel="micropub" href="/micropub">
     <link rel="me" href="mailto:dev.scobru@pm.me">
@@ -262,7 +268,7 @@ app.get('/', (req, res) => {
         body {
             background-color: #050505;
             color: #d8d8d8;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-family: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
             line-height: 1.6;
             margin: 0;
             padding: 40px 20px;
@@ -336,7 +342,7 @@ app.get('/', (req, res) => {
         }
         .post-preview {
             font-size: 0.9rem;
-            color: #b0b0b0;
+            color: #888888;
         }
         .read-more {
             font-size: 0.85rem;
@@ -382,7 +388,6 @@ app.get('/', (req, res) => {
         <header class="main-header">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <h1>${escapeHtml(SITE_NAME)}</h1>
-                <div class="status"><span class="status-dot"></span>VPS Online</div>
             </div>
             ${SITE_DESCRIPTION ? `<p style="color: #888888; font-size: 0.85rem; margin: 0;">${escapeHtml(SITE_DESCRIPTION)}</p>` : ''}
         </header>
@@ -438,7 +443,7 @@ app.get('/posts/:slug', (req, res) => {
         body {
             background-color: #050505;
             color: #d8d8d8;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-family: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
             line-height: 1.6;
             margin: 0;
             padding: 40px 20px;
@@ -482,7 +487,7 @@ app.get('/posts/:slug', (req, res) => {
         }
         .content {
             font-size: 0.95rem;
-            color: #c0c0c0;
+            color: #888888;
         }
         .content h2 {
             font-size: 1.15rem;
@@ -583,7 +588,7 @@ function requireAdminAuth(req, res, next) {
 app.use('/admin', express.urlencoded({ extended: false }));
 
 const ADMIN_STYLE = `
-        body { background: #050505; color: #d8d8d8; font-family: ui-monospace, monospace; padding: 30px; max-width: 800px; margin: 0 auto; }
+        body { background: #050505; color: #d8d8d8; font-family: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif; padding: 30px; max-width: 800px; margin: 0 auto; }
         table { width: 100%; border-collapse: collapse; }
         td, th { border-bottom: 1px solid #222; padding: 8px; text-align: left; vertical-align: top; }
         .tag { color: #888; }
