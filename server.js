@@ -18,6 +18,7 @@ const mediaDir = path.join(postsDir, 'media');
 const SITE_URL = (process.env.ME || 'https://presence.scobrudot.dev').replace(/\/+$/, '');
 const SECRET = process.env.SECRET || process.env.INDIEAUTH_SECRET || '';
 const AUTH_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const AUTH_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
 const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 giorni
 
 // Nome e descrizione del sito (mostrati in homepage). Configurabili via env.
@@ -561,17 +562,16 @@ app.get('/posts/:slug', (req, res) => {
 
 // 5. Admin UI: lista post + cancellazione. Protetta da Basic Auth.
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 function requireAdminAuth(req, res, next) {
-  if (!ADMIN_PASSWORD) {
-    return res.status(503).send('Admin UI disabilitata: imposta ADMIN_PASSWORD nelle variabili d\'ambiente.');
+  if (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH) {
+    return res.status(503).send('Admin UI disabilitata: imposta ADMIN_PASSWORD (o ADMIN_PASSWORD_HASH) nelle variabili d\'ambiente.');
   }
   const auth = req.headers.authorization || '';
   const [user, pass] = auth.startsWith('Basic ')
     ? Buffer.from(auth.slice(6), 'base64').toString().split(':')
     : [];
-  if (user !== ADMIN_USER || pass !== ADMIN_PASSWORD) {
+  if (user !== ADMIN_USER || !checkAdminPassword(pass)) {
     res.setHeader('WWW-Authenticate', 'Basic realm="presence admin"');
     return res.status(401).send('Autenticazione richiesta.');
   }
@@ -988,6 +988,29 @@ function timingEqual(a, b) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
+// Hash della password: scrypt salato, formato "scrypt:<salt_hex>:<hash_hex>".
+// Generato dalla pagina di setup /auth/new-password e messo in ADMIN_PASSWORD_HASH.
+function hashPassword(plain) {
+  const salt = crypto.randomBytes(16);
+  const derived = crypto.scryptSync(plain, salt, 64);
+  return `scrypt:${salt.toString('hex')}:${derived.toString('hex')}`;
+}
+
+function verifyPasswordHash(plain, stored) {
+  const [algo, saltHex, hashHex] = String(stored).split(':');
+  if (algo !== 'scrypt' || !saltHex || !hashHex) return false;
+  const salt = Buffer.from(saltHex, 'hex');
+  const expected = Buffer.from(hashHex, 'hex');
+  const derived = crypto.scryptSync(plain, salt, expected.length);
+  return expected.length === derived.length && crypto.timingSafeEqual(derived, expected);
+}
+
+// ADMIN_PASSWORD_HASH ha priorità su ADMIN_PASSWORD in chiaro se entrambe sono impostate.
+function checkAdminPassword(candidate) {
+  if (AUTH_PASSWORD_HASH) return verifyPasswordHash(candidate || '', AUTH_PASSWORD_HASH);
+  return timingEqual(candidate || '', AUTH_PASSWORD);
+}
+
 // Codici di autorizzazione: vita breve (10 min), uso singolo, in memoria.
 // ponytail: Map in memoria — se il container riavvia durante il login, rifai l'accesso.
 // Per single-user va bene; se serve multi-istanza, sposta su store condiviso.
@@ -1008,11 +1031,50 @@ function bearer(req) {
 }
 
 function requireConfigured(req, res, next) {
-  if (!SECRET || !AUTH_PASSWORD) {
-    return res.status(503).json({ error: 'service_unavailable', error_description: 'Imposta SECRET e ADMIN_PASSWORD per abilitare IndieAuth/Micropub.' });
+  if (!SECRET || (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH)) {
+    return res.status(503).json({ error: 'service_unavailable', error_description: 'Imposta SECRET e ADMIN_PASSWORD (o ADMIN_PASSWORD_HASH) per abilitare IndieAuth/Micropub.' });
   }
   next();
 }
+
+// --- Setup: genera l'hash della password da mettere in ADMIN_PASSWORD_HASH ---
+// Volutamente fuori da requireConfigured: serve anche prima che SECRET/ADMIN_PASSWORD siano impostati.
+function renderNewPasswordPage({ error, hash } = {}) {
+  return `<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"><title>Genera hash password — presence</title>
+<style>
+  body { background:#050505; color:#d8d8d8; font-family:ui-monospace,monospace; max-width:480px; margin:60px auto; padding:0 20px; }
+  .box { border:1px solid #222; background:#0a0a0a; padding:25px; border-radius:6px; }
+  h1 { font-size:1.3rem; color:#fff; }
+  p.hint { color:#888; font-size:0.85rem; }
+  code { color:#6cf; }
+  pre { color:#6cf; word-break:break-all; white-space:pre-wrap; background:#050505; border:1px solid #222; padding:12px; border-radius:4px; }
+  .error { color:#f66; }
+  input[type=password] { width:100%; box-sizing:border-box; background:#050505; color:#fff; border:1px solid #333; padding:10px; margin:12px 0; border-radius:4px; }
+  button { background:#06c; color:#fff; border:0; padding:10px 20px; border-radius:4px; cursor:pointer; width:100%; font-size:1rem; }
+</style></head><body><div class="box">
+  <h1>Genera hash password</h1>
+  <p class="hint">Inserisci la password che vuoi usare per <code>/admin</code> e IndieAuth. Il server genera un hash da incollare in <code>ADMIN_PASSWORD_HASH</code> nel <code>.env</code> — la password in chiaro non viene salvata da nessuna parte.</p>
+  ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
+  ${hash ? `<p>Hash generato, copialo in <code>ADMIN_PASSWORD_HASH</code>:</p><pre>${escapeHtml(hash)}</pre><p class="hint">Poi rimuovi <code>ADMIN_PASSWORD</code> (o lasciala vuota) e riavvia il server.</p>` : ''}
+  <form method="POST" action="/auth/new-password">
+    <input type="password" name="password" placeholder="Nuova password" autofocus required minlength="8">
+    <button type="submit">Genera hash</button>
+  </form>
+</div></body></html>`;
+}
+
+app.get('/auth/new-password', (req, res) => {
+  res.setHeader('Content-Type', 'text/html');
+  res.send(renderNewPasswordPage());
+});
+
+app.post('/auth/new-password', express.urlencoded({ extended: false }), (req, res) => {
+  const password = req.body?.password || '';
+  res.setHeader('Content-Type', 'text/html');
+  if (!password) return res.status(400).send(renderNewPasswordPage({ error: 'Inserisci una password.' }));
+  res.send(renderNewPasswordPage({ hash: hashPassword(password) }));
+});
 
 app.use(['/auth', '/token', '/micropub', '/media'], express.urlencoded({ extended: false }), express.json(), requireConfigured);
 
@@ -1057,7 +1119,7 @@ app.get('/auth', (req, res) => {
 app.post('/auth', (req, res) => {
   const { password, client_id, redirect_uri, state, code_challenge, code_challenge_method, scope } = req.body;
 
-  if (!timingEqual(password || '', AUTH_PASSWORD)) {
+  if (!checkAdminPassword(password)) {
     return res.status(401).send('Password errata.');
   }
   if (!client_id || !redirect_uri || !code_challenge || code_challenge_method !== 'S256') {
@@ -1272,8 +1334,8 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
 // Avvia il server solo se eseguito direttamente (non in import, es. dai test)
 if (process.argv[1] === __filename) {
   app.listen(PORT, () => {
-    if (!SECRET || !AUTH_PASSWORD) {
-      console.warn('ATTENZIONE: SECRET o ADMIN_PASSWORD non impostati — IndieAuth/Micropub e /admin restano disabilitati.');
+    if (!SECRET || (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH)) {
+      console.warn('ATTENZIONE: SECRET o ADMIN_PASSWORD/ADMIN_PASSWORD_HASH non impostati — IndieAuth/Micropub e /admin restano disabilitati. Visita /auth/new-password per generare un hash.');
     }
     console.log(`Server unificato presence attivo sulla porta ${PORT}`);
     console.log(`Cartella sorgente post impostata su: ${postsDir}`);
