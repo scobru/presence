@@ -156,6 +156,7 @@ function getSortedPosts() {
         let date = '';
         let type = 'note';
         let tags = [];
+        let mastodonId = '';
         let bodyContent = content;
 
         if (frontMatterMatch) {
@@ -181,6 +182,7 @@ function getSortedPosts() {
               if (key === 'title') title = val;
               else if (key === 'date') date = val;
               else if (key === 'type') type = val || 'note';
+              else if (key === 'mastodon_id') mastodonId = val;
               else if (key === 'tags') currentKey = 'tags';
               else currentKey = '';
             }
@@ -199,6 +201,7 @@ function getSortedPosts() {
           date: date || new Date().toISOString(),
           type,
           tags,
+          mastodonId,
           content: bodyContent.trim()
         });
       } catch (e) {
@@ -718,13 +721,14 @@ export function slugify(str) {
 }
 
 // Builds the YAML frontmatter block (simple parser: no quotes in values)
-function buildFrontmatter({ title, date, tags = [], type = 'note' }) {
+function buildFrontmatter({ title, date, tags = [], type = 'note', mastodonId = '' }) {
   const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
   const typeYaml = type && type !== 'note' ? `type: ${type}\n` : '';
+  const mastodonYaml = mastodonId ? `mastodon_id: ${mastodonId}\n` : '';
   const tagsYaml = tags.length
     ? 'tags:\n' + tags.map(t => `  - "${String(t).replace(/"/g, '')}"`).join('\n') + '\n'
     : '';
-  return `---\n${titleYaml}${typeYaml}date: ${date}\n${tagsYaml}---\n`;
+  return `---\n${titleYaml}${typeYaml}${mastodonYaml}date: ${date}\n${tagsYaml}---\n`;
 }
 
 // Appends images at the end of the body as Markdown
@@ -760,7 +764,17 @@ export function writePost({ title, body, tags = [], photos = [], type = 'note' }
   }
 
   fs.writeFileSync(filePath, buildFrontmatter({ title, date: now.toISOString(), tags, type }) + body + '\n');
-  return { slug, url: `${SITE_URL}/posts/${slug}` };
+  return { slug, filename, url: `${SITE_URL}/posts/${slug}` };
+}
+
+// Injects mastodon_id into an existing post's frontmatter (once, after create).
+function setPostMastodonId(filename, id) {
+  const filePath = path.join(postsDir, path.basename(filename));
+  if (!id || !fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, 'utf8');
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+  if (!m || /^mastodon_id:/m.test(m[1])) return;
+  fs.writeFileSync(filePath, `---\n${m[1]}\nmastodon_id: ${id}\n---\n${m[2]}`);
 }
 
 // Rewrites an existing post identified by filename, keeping date and slug
@@ -779,8 +793,8 @@ export function updatePost(filename, { title, body, tags }) {
   const newBody = body !== undefined ? String(body).trim() : existing.content;
   const newTags = tags !== undefined ? tags.map(t => String(t).trim()).filter(Boolean) : existing.tags;
 
-  fs.writeFileSync(filePath, buildFrontmatter({ title: newTitle, date: existing.date, tags: newTags, type: existing.type }) + newBody + '\n');
-  return { slug: existing.slug, url: `${SITE_URL}/posts/${existing.slug}` };
+  fs.writeFileSync(filePath, buildFrontmatter({ title: newTitle, date: existing.date, tags: newTags, type: existing.type, mastodonId: existing.mastodonId }) + newBody + '\n');
+  return { slug: existing.slug, url: `${SITE_URL}/posts/${existing.slug}`, mastodonId: existing.mastodonId, title: newTitle, body: newBody };
 }
 
 // Deletes a post given its public URL (e.g. https://site/posts/slug)
@@ -849,7 +863,28 @@ async function postMastodonStatus(text, photoPaths = [], inReplyToId) {
     console.error('Mastodon syndication failed:', r.status, await r.text().catch(() => ''));
     return null;
   }
-  return (await r.json()).url || null;
+  const j = await r.json();
+  return { id: j.id || null, url: j.url || null };
+}
+
+// Edits an existing Mastodon status in place (text only). Returns the URL or null.
+async function editMastodonStatus(id, text) {
+  if (!MASTODON_URL || !MASTODON_TOKEN || !id) return null;
+  try {
+    const r = await fetch(`${MASTODON_URL}/api/v1/statuses/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${MASTODON_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: text })
+    });
+    if (!r.ok) {
+      console.error('Mastodon edit failed:', r.status, await r.text().catch(() => ''));
+      return null;
+    }
+    return (await r.json()).url || null;
+  } catch (e) {
+    console.error('Mastodon edit error:', e.message);
+    return null;
+  }
 }
 
 // Resolves a remote post URL into the local status id on the instance, via federated
@@ -901,8 +936,8 @@ async function syndicateToMastodon({ title, body, content, url, photoPaths = [],
     if (link && ['reply', 'rsvp', 'repost', 'like'].includes(type)) {
       const id = await resolveMastodonStatusId(link);
       if (id) {
-        if (type === 'repost') return await reblogMastodonStatus(id);
-        if (type === 'like') return await favouriteMastodonStatus(id);
+        if (type === 'repost') return { id: null, url: await reblogMastodonStatus(id) };
+        if (type === 'like') return { id: null, url: await favouriteMastodonStatus(id) };
         return await postMastodonStatus(mastodonStatusText(title, content, url), photoPaths, id);
       }
     }
@@ -922,8 +957,9 @@ app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (re
   const content = req.body.content;
   const body = [contextLine(type, link), content].filter(Boolean).join('\n\n');
   try {
-    const { url } = writePost({ title: req.body.title, body, tags, photos, type });
-    await syndicateToMastodon({ title: req.body.title, body, content, url, photoPaths, type, link });
+    const { url, filename } = writePost({ title: req.body.title, body, tags, photos, type });
+    const synd = await syndicateToMastodon({ title: req.body.title, body, content, url, photoPaths, type, link });
+    if (synd?.id) setPostMastodonId(filename, synd.id);
     res.redirect('/admin');
   } catch (e) {
     res.status(e.status || 500).send(e.message);
@@ -931,10 +967,11 @@ app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (re
 });
 
 // Saves changes to an existing post
-app.post('/admin/posts/:filename', requireAdminAuth, (req, res) => {
+app.post('/admin/posts/:filename', requireAdminAuth, async (req, res) => {
   const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
   try {
-    updatePost(req.params.filename, { title: req.body.title, body: req.body.content, tags });
+    const upd = updatePost(req.params.filename, { title: req.body.title, body: req.body.content, tags });
+    if (upd.mastodonId) await editMastodonStatus(upd.mastodonId, mastodonStatusText(upd.title, upd.body, upd.url));
     res.redirect('/admin');
   } catch (e) {
     res.status(e.status || 500).send(e.message);
@@ -1296,10 +1333,11 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       const inlinePhotos = (req.files || []).map(mediaUrlFor);
       parsed.photos = [...parsed.photos, ...inlinePhotos];
 
-      const { url } = writePost(parsed);
+      const { url, filename } = writePost(parsed);
       // parsed.photos already contains the inline URLs: resolve the local ones for Mastodon
       const photoPaths = parsed.photos.map(mediaUrlToPath).filter(Boolean);
-      await syndicateToMastodon({ title: parsed.title, body: parsed.body, content: parsed.content, url, photoPaths, type: parsed.type, link: parsed.link });
+      const synd = await syndicateToMastodon({ title: parsed.title, body: parsed.body, content: parsed.content, url, photoPaths, type: parsed.type, link: parsed.link });
+      if (synd?.id) setPostMastodonId(filename, synd.id);
       res.setHeader('Location', url);
       return res.status(201).end();
     }
@@ -1323,7 +1361,8 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       }
       if (repl.category !== undefined) patch.tags = [].concat(repl.category).filter(Boolean);
 
-      updatePost(post.filename, patch);
+      const upd = updatePost(post.filename, patch);
+      if (upd.mastodonId) await editMastodonStatus(upd.mastodonId, mastodonStatusText(upd.title, upd.body, upd.url));
       res.setHeader('Location', `${SITE_URL}/posts/${post.slug}`);
       return res.status(204).end();
     }
