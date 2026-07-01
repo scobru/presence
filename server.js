@@ -797,14 +797,15 @@ export function updatePost(filename, { title, body, tags }) {
   return { slug: existing.slug, url: `${SITE_URL}/posts/${existing.slug}`, mastodonId: existing.mastodonId, title: newTitle, body: newBody };
 }
 
-// Deletes a post given its public URL (e.g. https://site/posts/slug)
+// Deletes a post given its public URL (e.g. https://site/posts/slug).
+// Returns the deleted post (with mastodonId) or null.
 function deletePostByUrl(url) {
   const post = findPostByUrl(url);
-  if (!post) return false;
+  if (!post) return null;
   const filePath = path.join(postsDir, post.filename);
-  if (path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) return false;
+  if (path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) return null;
   fs.unlinkSync(filePath);
-  return true;
+  return post;
 }
 
 // Finds a post from its public URL
@@ -884,6 +885,25 @@ async function editMastodonStatus(id, text) {
   } catch (e) {
     console.error('Mastodon edit error:', e.message);
     return null;
+  }
+}
+
+// Deletes an existing Mastodon status. Returns true on success.
+async function deleteMastodonStatus(id) {
+  if (!MASTODON_URL || !MASTODON_TOKEN || !id) return false;
+  try {
+    const r = await fetch(`${MASTODON_URL}/api/v1/statuses/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${MASTODON_TOKEN}` }
+    });
+    if (!r.ok) {
+      console.error('Mastodon delete failed:', r.status, await r.text().catch(() => ''));
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('Mastodon delete error:', e.message);
+    return false;
   }
 }
 
@@ -978,7 +998,7 @@ app.post('/admin/posts/:filename', requireAdminAuth, async (req, res) => {
   }
 });
 
-app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
+app.post('/admin/posts/:filename/delete', requireAdminAuth, async (req, res) => {
   const filename = path.basename(req.params.filename);
   const filePath = path.join(postsDir, filename);
 
@@ -986,7 +1006,9 @@ app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
     return res.status(404).send('Post not found.');
   }
 
+  const post = getSortedPosts().find(p => p.filename === filename);
   fs.unlinkSync(filePath);
+  if (post?.mastodonId) await deleteMastodonStatus(post.mastodonId);
   res.redirect('/admin');
 });
 
@@ -1371,8 +1393,10 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       if (!hasScope(token, 'delete')) {
         return res.status(403).json({ error: 'insufficient_scope', scope: 'delete' });
       }
-      const ok = deletePostByUrl(req.body.url);
-      return ok ? res.status(204).end() : res.status(404).json({ error: 'not_found' });
+      const deleted = deletePostByUrl(req.body.url);
+      if (!deleted) return res.status(404).json({ error: 'not_found' });
+      if (deleted.mastodonId) await deleteMastodonStatus(deleted.mastodonId);
+      return res.status(204).end();
     }
 
     return res.status(501).json({ error: 'not_implemented', error_description: `Action '${action}' not supported.` });
