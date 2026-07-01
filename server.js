@@ -25,8 +25,8 @@ const TOKEN_TTL = 30 * 24 * 60 * 60; // 30 days
 const SITE_NAME = process.env.SITE_NAME || 'presence';
 const SITE_DESCRIPTION = process.env.SITE_DESCRIPTION || '';
 
-// Light mode: enabled when <html data-theme="light">. Il tema iniziale segue
-// l'OS (o la scelta salvata) via THEME_UI; il bottone 🌓 lo commuta e lo persiste.
+// Light mode: enabled when <html data-theme="light">. The initial theme follows
+// the OS (or the saved choice) via THEME_UI; the 🌓 button toggles and persists it.
 const LIGHT_CSS = `
 html[data-theme="light"] body { background-color: #fbfbfb !important; color: #1f1f1f !important; }
 html[data-theme="light"] .post-card, html[data-theme="light"] .box { background-color: #ffffff !important; border-color: #e5e5e5 !important; box-shadow: 0 1px 4px rgba(0,0,0,0.08) !important; }
@@ -43,41 +43,41 @@ html[data-theme="light"] button.danger { background: #fdd !important; border-col
 html[data-theme="light"] header.main-header { border-color: #e5e5e5 !important; }
 html[data-theme="light"] .theme-toggle { color: #333 !important; border-color: #ccc !important; }`;
 
-// Bottone di commutazione tema + init inline (evita flash: legge la scelta salvata o l'OS).
+// Theme toggle button + inline init (avoids flash: reads the saved choice or the OS).
 const THEME_UI = `
-<button class="theme-toggle" title="Cambia tema" aria-label="Cambia tema" onclick="(function(d){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);localStorage.setItem('theme',n)})(document.documentElement)" style="position:fixed;top:12px;right:12px;z-index:10;background:transparent;border:1px solid #444;color:#aaa;border-radius:6px;padding:6px 9px;cursor:pointer;font-size:1rem;line-height:1">🌓</button>
+<button class="theme-toggle" title="Toggle theme" aria-label="Toggle theme" onclick="(function(d){var n=d.getAttribute('data-theme')==='light'?'dark':'light';d.setAttribute('data-theme',n);localStorage.setItem('theme',n)})(document.documentElement)" style="position:fixed;top:12px;right:12px;z-index:10;background:transparent;border:1px solid #444;color:#aaa;border-radius:6px;padding:6px 9px;cursor:pointer;font-size:1rem;line-height:1">🌓</button>
 <script>(function(){try{var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t)}catch(e){}})()</script>`;
 
-// Syndication Mastodon (opzionale): attiva solo se entrambe le variabili sono presenti
+// Mastodon syndication (optional): active only if both variables are present
 const MASTODON_URL = (process.env.MASTODON_URL || '').replace(/\/+$/, '');
 const MASTODON_TOKEN = process.env.MASTODON_ACCESS_TOKEN || '';
 const MASTODON_USER = process.env.MASTODON_USER || '';
 
-// Tipi di post IndieWeb — sorgente unica per composer, rendering e filtro homepage.
-// url:true → richiede un URL di riferimento; verb = frase mostrata in cima al post;
-// lead:true → tipo senza URL ma con riga di intestazione dedicata (food/drink).
+// IndieWeb post types — single source for composer, rendering and homepage filter.
+// url:true → requires a reference URL; verb = phrase shown at the top of the post;
+// lead:true → type without URL but with a dedicated header line (food/drink).
 const POST_TYPES = {
-  note:     { label: 'Nota',     emoji: '📝', url: false, prop: null,           verb: '' },
-  article:  { label: 'Articolo', emoji: '📄', url: false, prop: null,           verb: '' },
-  bookmark: { label: 'Bookmark', emoji: '🔖', url: true,  prop: 'bookmark-of',  verb: 'Segnalibro:' },
-  reply:    { label: 'Risposta', emoji: '↩',  url: true,  prop: 'in-reply-to',  verb: 'In risposta a' },
-  rsvp:     { label: 'RSVP',     emoji: '📅', url: true,  prop: 'in-reply-to',  verb: 'Partecipo a' },
-  repost:   { label: 'Repost',   emoji: '🔁', url: true,  prop: 'repost-of',    verb: 'Condiviso da' },
-  like:     { label: 'Like',     emoji: '👍', url: true,  prop: 'like-of',      verb: 'Mi piace:' },
-  checkin:  { label: 'Check-in', emoji: '📍', url: true,  prop: 'checkin',      verb: 'Sono a' },
-  photo:    { label: 'Foto',     emoji: '📷', url: false, prop: null,           verb: '' },
-  listen:   { label: 'Listen',   emoji: '🎧', url: true,  prop: 'listen-of',    verb: 'Sto ascoltando' },
-  food:     { label: 'Food',     emoji: '🍽', url: false, prop: null,           verb: 'Sto mangiando', lead: true },
-  drink:    { label: 'Drink',    emoji: '🥤', url: false, prop: null,           verb: 'Sto bevendo',   lead: true }
+  note:     { label: 'Note',     emoji: '📝', url: false, prop: null,           verb: '' },
+  article:  { label: 'Article',  emoji: '📄', url: false, prop: null,           verb: '' },
+  bookmark: { label: 'Bookmark', emoji: '🔖', url: true,  prop: 'bookmark-of',  verb: 'Bookmark:' },
+  reply:    { label: 'Reply',    emoji: '↩',  url: true,  prop: 'in-reply-to',  verb: 'In reply to' },
+  rsvp:     { label: 'RSVP',     emoji: '📅', url: true,  prop: 'in-reply-to',  verb: 'Attending' },
+  repost:   { label: 'Repost',   emoji: '🔁', url: true,  prop: 'repost-of',    verb: 'Shared from' },
+  like:     { label: 'Like',     emoji: '👍', url: true,  prop: 'like-of',      verb: 'Liked:' },
+  checkin:  { label: 'Check-in', emoji: '📍', url: true,  prop: 'checkin',      verb: 'At' },
+  photo:    { label: 'Photo',    emoji: '📷', url: false, prop: null,           verb: '' },
+  listen:   { label: 'Listen',   emoji: '🎧', url: true,  prop: 'listen-of',    verb: 'Listening to' },
+  food:     { label: 'Food',     emoji: '🍽', url: false, prop: null,           verb: 'Eating', lead: true },
+  drink:    { label: 'Drink',    emoji: '🥤', url: false, prop: null,           verb: 'Drinking', lead: true }
 };
 
-// Assicura che le cartelle esistano
+// Ensure directories exist
 fs.mkdirSync(mediaDir, { recursive: true });
 
 // Serve uploaded media as static files
 app.use('/media', express.static(mediaDir));
 
-// Upload media su disco: media/{yyyy}/{mm}/{timestamp}-{slug}.{ext}
+// Upload media to disk: media/{yyyy}/{mm}/{timestamp}-{slug}.{ext}
 const mediaUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
@@ -95,7 +95,7 @@ const mediaUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10 MB
 });
 
-// URL pubblico di un file caricato da multer
+// Public URL of a file uploaded by multer
 function mediaUrlFor(file) {
   const rel = path.relative(mediaDir, file.path).split(path.sep).join('/');
   return `${SITE_URL}/media/${rel}`;
@@ -125,7 +125,7 @@ function renderMarkdown(md) {
   html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
   html = html.replace(/`(.*?)`/g, '<code>$1</code>');
   html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-  // Immagini prima dei link (la sintassi immagine contiene quella del link)
+  // Images before links (image syntax contains the link syntax)
   html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:4px">');
   html = html.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
   html = '<p>' + html.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
@@ -237,7 +237,7 @@ app.get('/', (req, res) => {
     `;
   }).join('\n');
 
-  const filterOptions = ['<option value="">Tutti i tipi</option>']
+  const filterOptions = ['<option value="">All types</option>']
     .concat(Object.entries(POST_TYPES).map(([k, t]) =>
       `<option value="${k}"${k === filterType ? ' selected' : ''}>${t.emoji} ${t.label}</option>`))
     .join('');
@@ -372,7 +372,7 @@ app.get('/', (req, res) => {
 </head>
 <body>
     ${THEME_UI}
-    <!-- Microformats2 h-card per le informazioni del profilo IndieAuth -->
+    <!-- Microformats2 h-card for IndieAuth profile information -->
     <div class="h-card" style="display: none;">
         <a class="p-name u-url" href="${SITE_URL}/">scobru</a>
         <img class="u-photo" src="https://avatars.githubusercontent.com/u/1079164?v=4" alt="scobru">
@@ -531,7 +531,7 @@ app.get('/posts/:slug', (req, res) => {
 </head>
 <body>
     ${THEME_UI}
-    <!-- Microformats2 h-card per le informazioni del profilo IndieAuth -->
+    <!-- Microformats2 h-card for IndieAuth profile information -->
     <div class="h-card" style="display: none;">
         <a class="p-name u-url" href="https://presence.scobrudot.dev/">scobru</a>
         <img class="u-photo" src="https://avatars.githubusercontent.com/u/1079164?v=4" alt="scobru">
@@ -567,7 +567,7 @@ const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 
 function requireAdminAuth(req, res, next) {
   if (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH) {
-    return res.status(503).send('Admin UI disabilitata: imposta ADMIN_PASSWORD (o ADMIN_PASSWORD_HASH) nelle variabili d\'ambiente.');
+    return res.status(503).send('Admin UI disabled: set ADMIN_PASSWORD (or ADMIN_PASSWORD_HASH) in the environment variables.');
   }
   const auth = req.headers.authorization || '';
   const [user, pass] = auth.startsWith('Basic ')
@@ -613,7 +613,7 @@ const ADMIN_STYLE = `
         }
         ${LIGHT_CSS}`;
 
-// Genera le <option> del selettore di tipo dai POST_TYPES
+// Generates the type selector <option> elements from POST_TYPES
 function typeOptions(selected) {
   return Object.entries(POST_TYPES)
     .map(([k, t]) => `<option value="${k}"${k === selected ? ' selected' : ''}>${t.emoji} ${t.label}</option>`)
@@ -629,7 +629,7 @@ app.get('/admin', requireAdminAuth, (req, res) => {
       <td class="tag">${post.tags.map(t => '#' + escapeHtml(t)).join(' ')}</td>
       <td>
         <div class="actions">
-          <a class="btn" href="/admin/posts/${encodeURIComponent(post.filename)}/edit">Modifica</a>
+          <a class="btn" href="/admin/posts/${encodeURIComponent(post.filename)}/edit">Edit</a>
           <form method="POST" action="/admin/posts/${encodeURIComponent(post.filename)}/delete" onsubmit="return confirm('Delete this post?');">
             <button class="danger" type="submit">Delete</button>
           </form>
@@ -638,8 +638,8 @@ app.get('/admin', requireAdminAuth, (req, res) => {
     </tr>`).join('\n');
 
   const syndNote = (MASTODON_URL && MASTODON_TOKEN)
-    ? `<p style="color:#6a6;">Syndication Mastodon attiva → ${escapeHtml(MASTODON_USER || MASTODON_URL)}</p>`
-    : '<p style="color:#666;">Syndication Mastodon non configurata.</p>';
+    ? `<p style="color:#6a6;">Mastodon syndication active → ${escapeHtml(MASTODON_USER || MASTODON_URL)}</p>`
+    : '<p style="color:#666;">Mastodon syndication not configured.</p>';
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
@@ -673,7 +673,7 @@ app.get('/admin', requireAdminAuth, (req, res) => {
 </html>`);
 });
 
-// Pagina di modifica di un post esistente
+// Edit page for an existing post
 app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
   const filename = path.basename(req.params.filename);
   const post = getSortedPosts().find(p => p.filename === filename);
@@ -685,18 +685,18 @@ app.get('/admin/posts/:filename/edit', requireAdminAuth, (req, res) => {
 <head>
     <link rel="icon" type="image/png" href="/favicon.png">
     <meta charset="UTF-8">
-    <title>Modifica — presence</title>
+    <title>Edit — presence</title>
     <style>${ADMIN_STYLE}</style>
 </head>
 <body>
     ${THEME_UI}
-    <p><a href="/admin">← Torna all'admin</a></p>
-    <h1>Modifica post</h1>
+    <p><a href="/admin">← Back to admin</a></p>
+    <h1>Edit post</h1>
     <form class="post-form" method="POST" action="/admin/posts/${encodeURIComponent(filename)}">
         <input name="title" placeholder="Title" value="${escapeHtml(post.title)}">
-        <input name="tags" placeholder="tag separati da virgola" value="${escapeHtml(post.tags.join(', '))}">
+        <input name="tags" placeholder="comma-separated tags" value="${escapeHtml(post.tags.join(', '))}">
         <textarea name="content" rows="16" required>${escapeHtml(post.content)}</textarea>
-        <button type="submit">Salva</button>
+        <button type="submit">Save</button>
     </form>
 </body>
 </html>`);
@@ -712,7 +712,7 @@ export function slugify(str) {
     .slice(0, 60);
 }
 
-// Costruisce il blocco frontmatter YAML (parser semplice: niente virgolette nei valori)
+// Builds the YAML frontmatter block (simple parser: no quotes in values)
 function buildFrontmatter({ title, date, tags = [], type = 'note' }) {
   const titleYaml = title ? `title: "${title.replace(/"/g, '')}"\n` : '';
   const typeYaml = type && type !== 'note' ? `type: ${type}\n` : '';
@@ -722,14 +722,14 @@ function buildFrontmatter({ title, date, tags = [], type = 'note' }) {
   return `---\n${titleYaml}${typeYaml}date: ${date}\n${tagsYaml}---\n`;
 }
 
-// Aggiunge le immagini in coda al body come Markdown
+// Appends images at the end of the body as Markdown
 function appendPhotos(body, photos = []) {
   if (!photos.length) return body;
   const imgs = photos.map(u => `![](${u})`).join('\n');
   return `${body}\n\n${imgs}`.trim();
 }
 
-// Scrive un nuovo post. Ritorna { slug, url } o lancia Error con .status.
+// Writes a new post. Returns { slug, url } or throws Error with .status.
 export function writePost({ title, body, tags = [], photos = [], type = 'note' }) {
   title = (title || '').trim();
   body = appendPhotos((body || '').trim(), photos);
@@ -758,13 +758,13 @@ export function writePost({ title, body, tags = [], photos = [], type = 'note' }
   return { slug, url: `${SITE_URL}/posts/${slug}` };
 }
 
-// Riscrive un post esistente identificato dal filename, mantenendo data e slug
-// (l'URL pubblico resta stabile). Ritorna { slug, url } o lancia Error con .status.
+// Rewrites an existing post identified by filename, keeping date and slug
+// (the public URL stays stable). Returns { slug, url } or throws Error with .status.
 export function updatePost(filename, { title, body, tags }) {
   filename = path.basename(filename);
   const filePath = path.join(postsDir, filename);
   if (!filename.endsWith('.md') || path.dirname(filePath) !== path.resolve(postsDir) || !fs.existsSync(filePath)) {
-    const e = new Error('Post non trovato.');
+    const e = new Error('Post not found.');
     e.status = 404;
     throw e;
   }
@@ -788,7 +788,7 @@ function deletePostByUrl(url) {
   return true;
 }
 
-// Trova un post dal suo URL pubblico
+// Finds a post from its public URL
 function findPostByUrl(url) {
   let slug;
   try {
@@ -799,7 +799,7 @@ function findPostByUrl(url) {
   return getSortedPosts().find(p => p.slug === slug) || null;
 }
 
-// Converte un URL media pubblico nel percorso del file locale, o null se esterno
+// Converts a public media URL into the local file path, or null if external
 function mediaUrlToPath(u) {
   const prefix = `${SITE_URL}/media/`;
   return typeof u === 'string' && u.startsWith(prefix)
@@ -807,7 +807,7 @@ function mediaUrlToPath(u) {
     : null;
 }
 
-// Carica un file su Mastodon (/api/v2/media). Ritorna l'id o null.
+// Uploads a file to Mastodon (/api/v2/media). Returns the id or null.
 async function uploadMastodonMedia(filePath) {
   try {
     const form = new FormData();
@@ -824,7 +824,7 @@ async function uploadMastodonMedia(filePath) {
   }
 }
 
-// Pubblica uno status Mastodon (eventualmente in thread su inReplyToId). Ritorna l'URL o null.
+// Publishes a Mastodon status (optionally threaded on inReplyToId). Returns the URL or null.
 async function postMastodonStatus(text, photoPaths = [], inReplyToId) {
   const mediaIds = [];
   for (const p of photoPaths) {
@@ -841,14 +841,14 @@ async function postMastodonStatus(text, photoPaths = [], inReplyToId) {
     })
   });
   if (!r.ok) {
-    console.error('Syndication Mastodon fallita:', r.status, await r.text().catch(() => ''));
+    console.error('Mastodon syndication failed:', r.status, await r.text().catch(() => ''));
     return null;
   }
   return (await r.json()).url || null;
 }
 
-// Risolve l'URL di un post remoto nell'id di status locale sull'istanza, via ricerca
-// federata ActivityPub (resolve=true). Serve per agganciare reply/repost/like nativi.
+// Resolves a remote post URL into the local status id on the instance, via federated
+// ActivityPub search (resolve=true). Used to hook up native reply/repost/like.
 async function resolveMastodonStatusId(url) {
   try {
     const r = await fetch(`${MASTODON_URL}/api/v2/search?resolve=true&type=statuses&q=${encodeURIComponent(url)}`, {
@@ -862,7 +862,7 @@ async function resolveMastodonStatusId(url) {
   }
 }
 
-// Boost/favourite nativi AP di uno status risolto: nessun nuovo status, solo l'azione.
+// Native AP boost/favourite of a resolved status: no new status, just the action.
 async function reblogMastodonStatus(id) {
   const r = await fetch(`${MASTODON_URL}/api/v1/statuses/${id}/reblog`, {
     method: 'POST',
@@ -880,16 +880,16 @@ async function favouriteMastodonStatus(id) {
   return (await r.json()).url || null;
 }
 
-// Testo per lo status Mastodon: titolo + contenuto (senza sintassi immagine, le foto
-// sono allegate a parte) + backlink al post originale.
+// Text for the Mastodon status: title + content (without image syntax, photos
+// are attached separately) + backlink to the original post.
 function mastodonStatusText(title, content, url) {
   const clean = (content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
   return `${title ? title + '\n\n' : ''}${clean.slice(0, 400)}\n\n${url}`;
 }
 
-// Crosspost su Mastodon (best-effort). photoPaths = percorsi file locali da allegare.
-// Per reply/rsvp/repost/like con un link risolvibile su un post Mastodon, usa l'azione
-// AP nativa (thread/boost/favourite) invece di un nuovo status col link nel testo.
+// Crosspost to Mastodon (best-effort). photoPaths = local file paths to attach.
+// For reply/rsvp/repost/like with a link resolvable to a Mastodon post, uses the
+// native AP action (thread/boost/favourite) instead of a new status with the link in the text.
 async function syndicateToMastodon({ title, body, content, url, photoPaths = [], type, link }) {
   if (!MASTODON_URL || !MASTODON_TOKEN) return null;
   try {
@@ -903,7 +903,7 @@ async function syndicateToMastodon({ title, body, content, url, photoPaths = [],
     }
     return await postMastodonStatus(mastodonStatusText(title, body, url), photoPaths);
   } catch (e) {
-    console.error('Syndication Mastodon errore:', e.message);
+    console.error('Mastodon syndication error:', e.message);
     return null;
   }
 }
@@ -925,7 +925,7 @@ app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (re
   }
 });
 
-// Salva le modifiche a un post esistente
+// Saves changes to an existing post
 app.post('/admin/posts/:filename', requireAdminAuth, (req, res) => {
   const tags = (req.body.tags || '').split(',').map(t => t.trim()).filter(Boolean);
   try {
@@ -950,7 +950,7 @@ app.post('/admin/posts/:filename/delete', requireAdminAuth, (req, res) => {
 
 // ============================================================
 // Native IndieAuth (authorization + token endpoint) and Micropub
-// Spec: https://indieauth.spec.indieweb.org/ e https://www.w3.org/TR/micropub/
+// Spec: https://indieauth.spec.indieweb.org/ and https://www.w3.org/TR/micropub/
 // ============================================================
 
 // --- Cryptographic helpers ---
@@ -992,8 +992,8 @@ function timingEqual(a, b) {
   return x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
-// Hash della password: scrypt salato, formato "scrypt:<salt_hex>:<hash_hex>".
-// Generato dalla pagina di setup /auth/new-password e messo in ADMIN_PASSWORD_HASH.
+// Password hash: salted scrypt, format "scrypt:<salt_hex>:<hash_hex>".
+// Generated by the /auth/new-password setup page and put in ADMIN_PASSWORD_HASH.
 function hashPassword(plain) {
   const salt = crypto.randomBytes(16);
   const derived = crypto.scryptSync(plain, salt, 64);
@@ -1009,7 +1009,7 @@ function verifyPasswordHash(plain, stored) {
   return expected.length === derived.length && crypto.timingSafeEqual(derived, expected);
 }
 
-// ADMIN_PASSWORD_HASH ha priorità su ADMIN_PASSWORD in chiaro se entrambe sono impostate.
+// ADMIN_PASSWORD_HASH takes priority over plaintext ADMIN_PASSWORD if both are set.
 function checkAdminPassword(candidate) {
   if (AUTH_PASSWORD_HASH) return verifyPasswordHash(candidate || '', AUTH_PASSWORD_HASH);
   return timingEqual(candidate || '', AUTH_PASSWORD);
@@ -1036,13 +1036,13 @@ function bearer(req) {
 
 function requireConfigured(req, res, next) {
   if (!SECRET || (!AUTH_PASSWORD && !AUTH_PASSWORD_HASH)) {
-    return res.status(503).json({ error: 'service_unavailable', error_description: 'Imposta SECRET e ADMIN_PASSWORD (o ADMIN_PASSWORD_HASH) per abilitare IndieAuth/Micropub.' });
+    return res.status(503).json({ error: 'service_unavailable', error_description: 'Set SECRET and ADMIN_PASSWORD (or ADMIN_PASSWORD_HASH) to enable IndieAuth/Micropub.' });
   }
   next();
 }
 
-// --- Setup: genera l'hash della password da mettere in ADMIN_PASSWORD_HASH ---
-// Volutamente fuori da requireConfigured: serve anche prima che SECRET/ADMIN_PASSWORD siano impostati.
+// --- Setup: generates the password hash to put in ADMIN_PASSWORD_HASH ---
+// Deliberately outside requireConfigured: also needed before SECRET/ADMIN_PASSWORD are set.
 function renderNewPasswordPage({ error, hash } = {}) {
   return `<!DOCTYPE html>
 <html lang="en"><head>
@@ -1059,7 +1059,7 @@ function renderNewPasswordPage({ error, hash } = {}) {
   button { background:#06c; color:#fff; border:0; padding:10px 20px; border-radius:4px; cursor:pointer; width:100%; font-size:1rem; }
 </style></head><body><div class="box">
   <h1>Generate hash password</h1>
-  <p class="hint">Inserisci la password che vuoi usare per <code>/admin</code> e IndieAuth. Il server genera un hash da incollare in <code>ADMIN_PASSWORD_HASH</code> nel <code>.env</code> — la password in chiaro non viene salvata da nessuna parte.</p>
+  <p class="hint">Enter the password you want to use for <code>/admin</code> and IndieAuth. The server generates a hash to paste into <code>ADMIN_PASSWORD_HASH</code> in <code>.env</code> — the plaintext password is never saved anywhere.</p>
   ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
   ${hash ? `<p>Hash generated, copy it to <code>ADMIN_PASSWORD_HASH</code>:</p><pre>${escapeHtml(hash)}</pre><p class="hint">Then remove <code>ADMIN_PASSWORD</code> (or leave it empty) and restart the server.</p>` : ''}
   <form method="POST" action="/auth/new-password">
@@ -1227,7 +1227,7 @@ function parseMicropubCreate(body) {
   };
 }
 
-// --- Media endpoint: carica un file e ritorna l'URL pubblico ---
+// --- Media endpoint: uploads a file and returns the public URL ---
 app.post('/media', (req, res) => {
   const token = verifyToken(bearer(req));
   if (!token) return res.status(401).json({ error: 'unauthorized' });
@@ -1236,7 +1236,7 @@ app.post('/media', (req, res) => {
   }
   mediaUpload.single('file')(req, res, (err) => {
     if (err) return res.status(400).json({ error: 'invalid_request', error_description: err.message });
-    if (!req.file) return res.status(400).json({ error: 'invalid_request', error_description: 'Campo file mancante.' });
+    if (!req.file) return res.status(400).json({ error: 'invalid_request', error_description: 'Missing file field.' });
     res.setHeader('Location', mediaUrlFor(req.file));
     res.status(201).end();
   });
@@ -1274,7 +1274,7 @@ app.get('/micropub', (req, res) => {
 });
 
 // --- Micropub: create / update / delete ---
-// upload.any() gestisce eventuali foto allegate inline (multipart); per JSON/form passa oltre
+// upload.any() handles any inline attached photos (multipart); for JSON/form it passes through
 app.post('/micropub', mediaUpload.any(), async (req, res) => {
   const token = verifyToken(bearer(req));
   if (!token) return res.status(401).json({ error: 'unauthorized' });
@@ -1287,12 +1287,12 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
         return res.status(403).json({ error: 'insufficient_scope', scope: 'create' });
       }
       const parsed = parseMicropubCreate(req.body);
-      // Foto caricate inline col post si aggiungono a quelle passate come URL
+      // Photos uploaded inline with the post are added to those passed as URLs
       const inlinePhotos = (req.files || []).map(mediaUrlFor);
       parsed.photos = [...parsed.photos, ...inlinePhotos];
 
       const { url } = writePost(parsed);
-      // parsed.photos contiene già gli URL inline: risolvi quelli locali per Mastodon
+      // parsed.photos already contains the inline URLs: resolve the local ones for Mastodon
       const photoPaths = parsed.photos.map(mediaUrlToPath).filter(Boolean);
       await syndicateToMastodon({ title: parsed.title, body: parsed.body, content: parsed.content, url, photoPaths, type: parsed.type, link: parsed.link });
       res.setHeader('Location', url);
@@ -1306,7 +1306,7 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       const post = findPostByUrl(req.body.url);
       if (!post) return res.status(404).json({ error: 'not_found' });
 
-      // Supporta `replace` di name/content/category (il caso più comune dei client)
+      // Supports `replace` of name/content/category (the most common client case)
       const repl = req.body.replace || {};
       const first = v => (Array.isArray(v) ? v[0] : v);
       const patch = {};
