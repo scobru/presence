@@ -820,32 +820,84 @@ async function uploadMastodonMedia(filePath) {
   }
 }
 
+// Pubblica uno status Mastodon (eventualmente in thread su inReplyToId). Ritorna l'URL o null.
+async function postMastodonStatus(text, photoPaths = [], inReplyToId) {
+  const mediaIds = [];
+  for (const p of photoPaths) {
+    const id = await uploadMastodonMedia(p);
+    if (id) mediaIds.push(id);
+  }
+  const r = await fetch(`${MASTODON_URL}/api/v1/statuses`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${MASTODON_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      status: text,
+      ...(mediaIds.length ? { media_ids: mediaIds } : {}),
+      ...(inReplyToId ? { in_reply_to_id: inReplyToId } : {})
+    })
+  });
+  if (!r.ok) {
+    console.error('Syndication Mastodon fallita:', r.status, await r.text().catch(() => ''));
+    return null;
+  }
+  return (await r.json()).url || null;
+}
+
+// Risolve l'URL di un post remoto nell'id di status locale sull'istanza, via ricerca
+// federata ActivityPub (resolve=true). Serve per agganciare reply/repost/like nativi.
+async function resolveMastodonStatusId(url) {
+  try {
+    const r = await fetch(`${MASTODON_URL}/api/v2/search?resolve=true&type=statuses&q=${encodeURIComponent(url)}`, {
+      headers: { Authorization: `Bearer ${MASTODON_TOKEN}` }
+    });
+    if (!r.ok) return null;
+    const { statuses } = await r.json();
+    return statuses && statuses[0] ? statuses[0].id : null;
+  } catch {
+    return null;
+  }
+}
+
+// Boost/favourite nativi AP di uno status risolto: nessun nuovo status, solo l'azione.
+async function reblogMastodonStatus(id) {
+  const r = await fetch(`${MASTODON_URL}/api/v1/statuses/${id}/reblog`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${MASTODON_TOKEN}` }
+  });
+  if (!r.ok) return null;
+  return (await r.json()).reblog?.url || null;
+}
+async function favouriteMastodonStatus(id) {
+  const r = await fetch(`${MASTODON_URL}/api/v1/statuses/${id}/favourite`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${MASTODON_TOKEN}` }
+  });
+  if (!r.ok) return null;
+  return (await r.json()).url || null;
+}
+
+// Testo per lo status Mastodon: titolo + contenuto (senza sintassi immagine, le foto
+// sono allegate a parte) + backlink al post originale.
+function mastodonStatusText(title, content, url) {
+  const clean = (content || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  return `${title ? title + '\n\n' : ''}${clean.slice(0, 400)}\n\n${url}`;
+}
+
 // Crosspost su Mastodon (best-effort). photoPaths = percorsi file locali da allegare.
-// Ritorna l'URL del toot o null.
-async function syndicateToMastodon({ title, body, url, photoPaths = [] }) {
+// Per reply/rsvp/repost/like con un link risolvibile su un post Mastodon, usa l'azione
+// AP nativa (thread/boost/favourite) invece di un nuovo status col link nel testo.
+async function syndicateToMastodon({ title, body, content, url, photoPaths = [], type, link }) {
   if (!MASTODON_URL || !MASTODON_TOKEN) return null;
   try {
-    // Carica le immagini come media Mastodon
-    const mediaIds = [];
-    for (const p of photoPaths) {
-      const id = await uploadMastodonMedia(p);
-      if (id) mediaIds.push(id);
+    if (link && ['reply', 'rsvp', 'repost', 'like'].includes(type)) {
+      const id = await resolveMastodonStatusId(link);
+      if (id) {
+        if (type === 'repost') return await reblogMastodonStatus(id);
+        if (type === 'like') return await favouriteMastodonStatus(id);
+        return await postMastodonStatus(mastodonStatusText(title, content, url), photoPaths, id);
+      }
     }
-
-    // Testo senza la sintassi immagine Markdown (le foto sono allegate a parte)
-    const clean = body.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
-    const text = `${title ? title + '\n\n' : ''}${clean.slice(0, 400)}\n\n${url}`;
-
-    const r = await fetch(`${MASTODON_URL}/api/v1/statuses`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${MASTODON_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: text, ...(mediaIds.length ? { media_ids: mediaIds } : {}) })
-    });
-    if (!r.ok) {
-      console.error('Syndication Mastodon fallita:', r.status, await r.text().catch(() => ''));
-      return null;
-    }
-    return (await r.json()).url || null;
+    return await postMastodonStatus(mastodonStatusText(title, body, url), photoPaths);
   } catch (e) {
     console.error('Syndication Mastodon errore:', e.message);
     return null;
@@ -858,10 +910,11 @@ app.post('/admin/posts', requireAdminAuth, mediaUpload.array('photo'), async (re
   const photos = (req.files || []).map(mediaUrlFor);
   const photoPaths = (req.files || []).map(f => f.path);
   const link = (req.body.link || '').trim();
-  const body = [contextLine(type, link), req.body.content].filter(Boolean).join('\n\n');
+  const content = req.body.content;
+  const body = [contextLine(type, link), content].filter(Boolean).join('\n\n');
   try {
     const { url } = writePost({ title: req.body.title, body, tags, photos, type });
-    await syndicateToMastodon({ title: req.body.title, body, url, photoPaths });
+    await syndicateToMastodon({ title: req.body.title, body, content, url, photoPaths, type, link });
     res.redirect('/admin');
   } catch (e) {
     res.status(e.status || 500).send(e.message);
@@ -1098,6 +1151,8 @@ function parseMicropubCreate(body) {
   return {
     type,
     title: first(p.name) || '',
+    content,
+    link,
     body: [contextLine(type, link), content].filter(Boolean).join('\n\n'),
     tags: [].concat(p.category || p['category[]'] || []).filter(Boolean),
     photos: photoUrls(p.photo || p['photo[]'])
@@ -1171,7 +1226,7 @@ app.post('/micropub', mediaUpload.any(), async (req, res) => {
       const { url } = writePost(parsed);
       // parsed.photos contiene già gli URL inline: risolvi quelli locali per Mastodon
       const photoPaths = parsed.photos.map(mediaUrlToPath).filter(Boolean);
-      await syndicateToMastodon({ title: parsed.title, body: parsed.body, url, photoPaths });
+      await syndicateToMastodon({ title: parsed.title, body: parsed.body, content: parsed.content, url, photoPaths, type: parsed.type, link: parsed.link });
       res.setHeader('Location', url);
       return res.status(201).end();
     }
